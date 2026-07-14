@@ -14,12 +14,29 @@ capabilities as the CLI:
 from __future__ import annotations
 
 import json
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 from .config import Config
 from .pipeline import apply_feedback, run_digest
 from .sources import available
+
+_DIGEST_CACHE_TTL = 300  # seconds; re-fetching arXiv on every page hit is wasteful and slow
+_digest_cache: dict = {}
+_digest_lock = threading.Lock()
+
+
+def _cached_digest(config: Config):
+    with _digest_lock:
+        cached = _digest_cache.get("result")
+        if cached and time.time() - _digest_cache["ts"] < _DIGEST_CACHE_TTL:
+            return cached
+        result = run_digest(config, dry_run=True)
+        _digest_cache["result"] = result
+        _digest_cache["ts"] = time.time()
+        return result
 
 _PAGE = """<!doctype html>
 <html><head><meta charset="utf-8"><title>PaperPulse</title>
@@ -52,7 +69,7 @@ def _bar(score: float, width: int = 12) -> str:
 
 
 def _render_dashboard(config: Config) -> str:
-    result = run_digest(config, dry_run=True)
+    result = _cached_digest(config)
     cards = []
     for i, item in enumerate(result.ranked, start=1):
         badge = getattr(item.trust, "badge", "clean") if item.trust else "clean"
@@ -79,7 +96,7 @@ def _render_dashboard(config: Config) -> str:
 
 
 def _digest_json(config: Config) -> dict:
-    result = run_digest(config, dry_run=True)
+    result = _cached_digest(config)
     return {
         "papers": [
             {
