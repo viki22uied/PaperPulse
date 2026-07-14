@@ -1,0 +1,37 @@
+# PaperPulse configuration.
+# Copy to `paperpulse.yaml` and edit, or run `paperpulse init`.
+
+# arXiv categories to pull from. Wildcards work, e.g. "q-fin.*".
+# Browse the taxonomy at https://arxiv.org/category_taxonomy
+categories:
+  - cs.LG
+  - cs.CL
+
+# A short paragraph describing what you care about. This seeds the interest
+# vector; feedback refines it from there.
+interests: >
+  Retrieval-augmented generation and dense retrieval for NLP, embedding models
+  and their evaluation, and efficient fine-tuning of language models. Less
+  interested in pure computer vision or reinforcement-learning theory.
+
+# Optional: abstracts (or descriptions) of papers you already love, to give the
+# profile a stronger start.
+seed_papers: []
+
+# How many recent papers to consider each run.
+max_results: 200
+
+# Ranking.
+top_n: 5
+diversity: 0.3        # 0 = pure relevance, 1 = maximise variety
+min_score: 0.0        # drop papers below this cosine similarity
+embedding_backend: auto   # auto | hashing | sentence-transformers
+
+# Summaries. Extractive by default (offline, free). Set to true and provide
+# OPENAI_API_KEY or ANTHROPIC_API_KEY for LLM three-bullet summaries.
+use_llm: false
+summary_sentences: 3
+
+# Output.
+output_dir: digests
+state_path: .paperpulse_state.json
