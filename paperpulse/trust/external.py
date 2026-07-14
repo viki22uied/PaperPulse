@@ -10,13 +10,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.parse
 import urllib.request
 
 from ..models import Paper
 from . import OK, WARN, FLAG, Signal, signal
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
-CODE_HOST_RE = re.compile(r"https?://(github\.com|gitlab\.com|huggingface\.co|zenodo\.org)/\S+", re.I)
+_CODE_HOSTS = {"github.com", "gitlab.com", "huggingface.co", "zenodo.org"}
 
 RETRACTION_WATCH_API = "https://api.labs.crossref.org/data/retractionwatch"
 S2_PAPER_API = "https://api.semanticscholar.org/graph/v1/paper/arXiv:{}"
@@ -49,10 +50,11 @@ def link_check_signal(
     if not online:
         return Signal("link_check", OK, "Link check skipped (offline).")
     haystack = paper.abstract + (full_text or "")
-    urls = [u.rstrip(".,);") for u in CODE_HOST_RE.findall(haystack)]
-    # CODE_HOST_RE captures only the host group; re-extract full URLs.
-    urls = [m.rstrip(".,);") for m in URL_RE.findall(haystack)
-            if re.match(r"https?://(github|gitlab|huggingface|zenodo)", m, re.I)]
+    candidates = [u.rstrip(".,);") for u in URL_RE.findall(haystack)]
+    # Exact host match (not prefix/substring) so "github.com.evil.tld" or
+    # "github.evil.tld" can't spoof an allowed host and pull an SSRF request
+    # out of us.
+    urls = [u for u in candidates if urllib.parse.urlparse(u).hostname in _CODE_HOSTS]
     if not urls:
         return Signal("link_check", OK, "No code/data links to verify.")
     dead = [u for u in urls if not _url_ok(u)]
