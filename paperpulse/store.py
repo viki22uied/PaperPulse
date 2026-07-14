@@ -1,4 +1,4 @@
-"""Persistent state: learned profiles (per user), seen papers, subscriptions.
+"""Persistent state: learned profiles (per user), seen papers.
 
 Everything lives in a single JSON file so the tool is trivial to inspect, back
 up, or delete. Multi-user support is a flat ``user -> profile`` map; single-user
@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .profile import InterestProfile
-from .subscriptions import Subscription
 
 DEFAULT_USER = "default"
 
@@ -24,7 +23,6 @@ class State:
     # id -> {"title", "abstract"} for papers we've shown, so feedback by id can
     # be re-embedded later without another network round-trip.
     shown: dict[str, dict] = field(default_factory=dict)
-    subscriptions: dict[str, Subscription] = field(default_factory=dict)
 
     # --- convenience for the common single-user case ------------------------
     def get_profile(self, user: str = DEFAULT_USER) -> InterestProfile | None:
@@ -62,15 +60,10 @@ class State:
         elif data.get("profile"):
             profiles[DEFAULT_USER] = InterestProfile.from_dict(data["profile"])
 
-        subs = {
-            name: Subscription.from_dict(s)
-            for name, s in data.get("subscriptions", {}).items()
-        }
         return cls(
             profiles=profiles,
             seen_ids=set(data.get("seen_ids", [])),
             shown=data.get("shown", {}),
-            subscriptions=subs,
         )
 
     def save(self, path: str | Path) -> Path:
@@ -79,7 +72,6 @@ class State:
             "profiles": {u: p.to_dict() for u, p in self.profiles.items()},
             "seen_ids": sorted(self.seen_ids),
             "shown": self.shown,
-            "subscriptions": {n: s.to_dict() for n, s in self.subscriptions.items()},
         }
         path.write_text(json.dumps(data, indent=2))
         return path

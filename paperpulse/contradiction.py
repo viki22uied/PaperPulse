@@ -1,13 +1,9 @@
-"""Contradiction and context mapping across a batch of papers.
+"""Contradiction mapping across a batch of papers.
 
-Two capabilities:
-
-* ``contradiction_map`` -- find pairs of papers that are topically close (high
-  embedding similarity) yet express opposing sentiment about their results. That
-  combination is a decent proxy for "these two disagree", worth surfacing as a
-  place to look, not a proven contradiction.
-* ``diff_since`` -- given the set of paper ids you saw last time, report what is
-  new / gone in a tracked subfield ("what changed since last week").
+``contradiction_map`` finds pairs of papers that are topically close (high
+embedding similarity) yet express opposing sentiment about their results. That
+combination is a decent proxy for "these two disagree", worth surfacing as a
+place to look, not a proven contradiction.
 """
 
 from __future__ import annotations
@@ -78,19 +74,3 @@ def contradiction_map(
                 )
     pairs.sort(key=lambda p: p.similarity, reverse=True)
     return pairs[:max_pairs]
-
-
-@dataclass
-class SubfieldDiff:
-    new: list[Paper]
-    still_present: list[str]
-    disappeared: list[str]
-
-
-def diff_since(current: list[Paper], previous_ids: set[str]) -> SubfieldDiff:
-    """Compare the current batch to a previous snapshot of ids."""
-    current_ids = {p.id for p in current}
-    new = [p for p in current if p.id not in previous_ids]
-    still = sorted(current_ids & previous_ids)
-    gone = sorted(previous_ids - current_ids)
-    return SubfieldDiff(new=new, still_present=still, disappeared=gone)

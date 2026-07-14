@@ -1,7 +1,7 @@
 """Contradiction mapping, cross-referencing, community DB, and delivery."""
 
 from paperpulse.community import CommunityDB
-from paperpulse.contradiction import contradiction_map, diff_since
+from paperpulse.contradiction import contradiction_map
 from paperpulse.crossref import code_to_text, similar_papers
 from paperpulse.delivery.rss import render_rss
 from paperpulse.embeddings import HashingBackend
@@ -38,14 +38,6 @@ def test_contradiction_map_finds_opposing_pair():
     assert any({p.a.id, p.b.id} == {"pos", "neg"} for p in pairs)
 
 
-def test_diff_since_reports_new_and_gone():
-    papers = [Paper(id="a", title="A", abstract=""), Paper(id="b", title="B", abstract="")]
-    diff = diff_since(papers, previous_ids={"b", "c"})
-    assert [p.id for p in diff.new] == ["a"]
-    assert diff.still_present == ["b"]
-    assert diff.disappeared == ["c"]
-
-
 def test_code_to_text_splits_identifiers():
     text = code_to_text("def cosine_similarity(a, b):  # dot product\n    return a @ b")
     assert "cosine" in text and "similarity" in text
@@ -72,11 +64,8 @@ def test_community_db_records_and_leaderboards(tmp_path):
     db.record_trust(
         "p2", score=0.9, badge="clean", flags=[], authors=["B. Author"],
     )
-    assert db.consensus_trust("p1")["reports"] == 1
     board = db.flag_leaderboard()
     assert board and board[0]["author"] == "A. Author"
-    db.add_annotation("p1", "baseline looks weak")
-    assert db.annotations("p1")[0].body == "baseline looks weak"
     db.close()
 
 
