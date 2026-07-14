@@ -13,11 +13,9 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ arXiv API pull by category / keyword / author
 - 🟡 bioRxiv / medRxiv source (real API; validate live)
 - 🟡 PubMed source via NCBI E-utilities (real API; `NCBI_API_KEY` optional)
-- 🟡 Full-text PDF parsing — text + section splitting (`paperpulse[pdf]`)
 - ⏳ OpenReview and SSRN adapters (interface ready — one class each)
-- ✅ Subscriptions: track a paper/author/subfield as a saved query
 - 🟡 Scheduled daily/weekly runs (cron + GitHub Action provided)
-- ⏳ Table/figure extraction from PDFs
+- ⏳ Full-text PDF parsing and table/figure extraction
 
 ## Relevance & personalization
 - ✅ Interest profile via embeddings (paragraph and/or seed papers)
@@ -50,13 +48,12 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ Metric-gaming detector
 - ✅ Benchmark-saturation flag
 - ✅ Real-world deployability check
-- ✅ "So what" extractor (strict problem/method/result summary)
+- ✅ Backtest-overfitting flag (no out-of-sample / walk-forward / cost check)
 - ⏳ Config-driven per-domain confound checklists (scaffold in config)
 
 ## Contradiction & context mapping
 - ✅ Multi-paper contradiction map for a batch (similarity + opposing polarity)
-- ✅ "What changed since last week" diff for a tracked subfield
-- ✅ Claim provenance — each summary line linked to its source sentence
+- ⏳ "What changed since last week" diff for a tracked subfield
 - ⏳ Citation-trail contradiction (needs reference resolution / full text)
 
 ## Cross-referencing your own work
@@ -74,8 +71,8 @@ exercised by you once keys/egress are in place — they fail soft until then.
 
 ## Community / social layer
 - ✅ Self-hostable shared trust store (SQLite) to pool scores across users
-- ✅ Per-paper annotation layer (PubPeer-style)
 - ✅ Over-claiming leaderboard by author/venue
+- ⏳ Per-paper annotation layer (PubPeer-style)
 - ⏳ Hosted public instance + moderation
 
 ## Infra / meta
