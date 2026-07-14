@@ -64,6 +64,10 @@ def _entry_to_paper(entry: ET.Element) -> Paper:
         elif link.attrib.get("rel") == "alternate":
             page_url = link.attrib.get("href", page_url)
 
+    def arxiv_text(tag: str) -> str:
+        node = entry.find(f"arxiv:{tag}", _NS)
+        return " ".join((node.text or "").split()) if node is not None else ""
+
     return Paper(
         id=short_id,
         title=" ".join(text("title").split()),
@@ -74,6 +78,8 @@ def _entry_to_paper(entry: ET.Element) -> Paper:
         updated=_parse_date(text("updated")),
         url=page_url,
         pdf_url=pdf_url,
+        comment=arxiv_text("comment"),
+        journal_ref=arxiv_text("journal_ref"),
     )
 
 

@@ -66,15 +66,20 @@ OUT_OF_SAMPLE_TERMS = re.compile(
 def subgroup_robustness_signal(paper: Paper, **_) -> Signal:
     """Strong aggregate numbers can hide weak subgroups. Reward abstracts that
     report breakdowns; nudge those that only ever speak in averages."""
-    if SUBGROUP_TERMS.search(paper.abstract):
+    match = SUBGROUP_TERMS.search(paper.abstract)
+    if match:
         return Signal(
-            "subgroup_robustness", OK, "Reports subgroup / robustness breakdowns."
+            "subgroup_robustness", OK, "Reports subgroup / robustness breakdowns.",
+            evidence=match.group(0),
         )
-    if AGG_ONLY.search(paper.abstract):
+    agg = AGG_ONLY.search(paper.abstract)
+    if agg:
         return Signal(
             "subgroup_robustness",
             WARN,
             "Only aggregate results mentioned; subgroup performance unclear.",
+            evidence=agg.group(0),
+            confidence=0.45,
         )
     return Signal("subgroup_robustness", OK, "No aggregate-only red flag.")
 
@@ -84,12 +89,16 @@ def metric_gaming_signal(paper: Paper, **_) -> Signal:
     """Flag improvements framed around a metric with hints of marginal or
     post-hoc gains rather than a genuine underlying advance."""
     text = paper.abstract
-    if METRIC_TERMS.search(text) and GAMING_TERMS.search(text):
+    metric = METRIC_TERMS.search(text)
+    gaming = GAMING_TERMS.search(text)
+    if metric and gaming:
         return Signal(
             "metric_gaming",
             WARN,
             "Metric gains described in marginal / post-hoc terms; check whether "
             "the improvement is within variance.",
+            evidence=f"{metric.group(0)} … {gaming.group(0)}",
+            confidence=0.55,
         )
     return Signal("metric_gaming", OK, "No metric-gaming language detected.")
 
@@ -98,12 +107,15 @@ def metric_gaming_signal(paper: Paper, **_) -> Signal:
 def deployability_signal(paper: Paper, **_) -> Signal:
     """Flag assumptions that make a result hard to use in practice: oracle
     inputs, non-causal / look-ahead features, or extreme compute."""
-    if DEPLOY_RED_FLAGS.search(paper.abstract):
+    match = DEPLOY_RED_FLAGS.search(paper.abstract)
+    if match:
         return Signal(
             "deployability",
             WARN,
             "Mentions assumptions that may not hold at inference (oracle inputs, "
             "look-ahead features, or very large compute).",
+            evidence=match.group(0),
+            confidence=0.6,
         )
     return Signal("deployability", OK, "No obvious deployability red flags.")
 
@@ -112,12 +124,16 @@ def deployability_signal(paper: Paper, **_) -> Signal:
 def leakage_signal(paper: Paper, **_) -> Signal:
     """Random splits on temporal / financial data are a leakage classic."""
     text = paper.abstract
-    if TIME_SERIES_TERMS.search(text) and LEAKAGE_TERMS.search(text):
+    ts = TIME_SERIES_TERMS.search(text)
+    split = LEAKAGE_TERMS.search(text)
+    if ts and split:
         return Signal(
             "leakage",
             FLAG,
             "Random/k-fold splitting on time-series-like data risks lookahead "
             "leakage; a temporal split is usually required.",
+            evidence=f"{ts.group(0)} + {split.group(0)}",
+            confidence=0.75,
         )
     return Signal("leakage", OK, "No obvious train/test leakage pattern.")
 
@@ -135,6 +151,8 @@ def crowding_signal(paper: Paper, *, crowding: float | None = None, **_) -> Sign
             WARN,
             f"Very similar to other papers in the batch (crowding {crowding:.2f}); "
             "likely incremental.",
+            evidence=f"crowding {crowding:.2f}",
+            confidence=0.5,
         )
     return Signal("crowding", OK, f"Relatively distinct (crowding {crowding:.2f}).")
 
@@ -144,13 +162,16 @@ def backtest_overfit_signal(paper: Paper, **_) -> Signal:
     """Backtested returns without an out-of-sample or cost-aware check are the
     classic quant-strategy overfitting tell."""
     text = paper.abstract
-    if BACKTEST_TERMS.search(text) and not OUT_OF_SAMPLE_TERMS.search(text):
+    match = BACKTEST_TERMS.search(text)
+    if match and not OUT_OF_SAMPLE_TERMS.search(text):
         return Signal(
             "backtest_overfit",
             WARN,
             "Backtested/historical results with no mention of an out-of-sample, "
             "walk-forward, or transaction-cost check; may be overfit to the "
             "backtest window.",
+            evidence=match.group(0),
+            confidence=0.6,
         )
     return Signal("backtest_overfit", OK, "No backtest-only red flag.")
 
@@ -158,10 +179,13 @@ def backtest_overfit_signal(paper: Paper, **_) -> Signal:
 @signal("baseline_fairness")
 def baseline_fairness_signal(paper: Paper, **_) -> Signal:
     """Wins over weak or outdated baselines are worth discounting."""
-    if WEAK_BASELINE.search(paper.abstract):
+    match = WEAK_BASELINE.search(paper.abstract)
+    if match:
         return Signal(
             "baseline_fairness",
             WARN,
             "Comparison may rely on a weak or outdated baseline.",
+            evidence=match.group(0),
+            confidence=0.55,
         )
     return Signal("baseline_fairness", OK, "No weak-baseline language detected.")
