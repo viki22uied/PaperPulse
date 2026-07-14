@@ -48,7 +48,6 @@ careful LoRA study rises to the top.
 | Personalisation | static keywords | **Rocchio feedback loop**, per-user profiles |
 | Trust | blind trust in the summary | **10+ signal-quality checks** with a badge |
 | Novelty | — | **crowding score** flags incremental work |
-| Provenance | — | every summary line traces back to a source sentence |
 | Cost to start | API key required | **runs fully offline** |
 
 ## How the ranking works
@@ -85,6 +84,7 @@ Several are drawn straight from systematic-trading research discipline:
 - **metric gaming** — did a metric move without a genuine underlying gain?
 - **deployability** — oracle inputs, look-ahead features, or unrealistic compute?
 - **leakage** — random splits on time-series/financial data (a classic lookahead trap)
+- **backtest overfitting** — backtested returns with no out-of-sample, walk-forward, or transaction-cost check
 - **baseline fairness**, **evidence / error bars**, **over-claiming**, **benchmark saturation**, **reproducibility (code/data links)**
 
 Turn on `--online` (or `trust_online: true`) to add **dead-link detection**, a
