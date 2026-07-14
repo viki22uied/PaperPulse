@@ -11,6 +11,7 @@ env/
 
 # PaperPulse runtime artifacts
 .paperpulse_state.json
+.paperpulse_serve.log
 digests/
 paperpulse.yaml
 

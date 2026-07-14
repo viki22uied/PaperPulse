@@ -39,8 +39,9 @@ all = [
 paperpulse = "paperpulse.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/viki22uied/research-guide"
-Issues = "https://github.com/viki22uied/research-guide/issues"
+Homepage = "https://github.com/viki22uied/PaperPulse"
+Repository = "https://github.com/viki22uied/PaperPulse"
+Issues = "https://github.com/viki22uied/PaperPulse/issues"
 
 [tool.setuptools.packages.find]
 include = ["paperpulse*"]

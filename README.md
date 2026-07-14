@@ -1,6 +1,15 @@
 # PaperPulse
 
+[![CI](https://github.com/viki22uied/PaperPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/viki22uied/PaperPulse/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/paperpulse)](https://pypi.org/project/paperpulse/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **The five papers that actually matter to you today — ranked, trust-scored, and summarised in plain English.**
+
+📄 **[See a real digest generated today →](examples/2026-07-14.md)** &nbsp;·&nbsp;
+🗺️ **[Roadmap](ROADMAP.md)** &nbsp;·&nbsp;
+🧪 **[Annotated sample](examples/sample-digest.md)**
 
 arXiv drops hundreds of papers a day. Summaries are a solved problem; *triage*
 isn't. PaperPulse is built around the two questions that actually waste your
@@ -19,14 +28,14 @@ embeddings + extractive summaries), and scales up cleanly to semantic embeddings
 and LLM summaries when you want them.
 
 ```bash
-pip install -e .
-paperpulse init          # write a starter paperpulse.yaml
+pip install paperpulse    # or: pip install -e .  (from a clone)
+paperpulse init           # write a starter paperpulse.yaml
 # edit `interests` and `categories`
-paperpulse run           # today's ranked, trust-scored digest -> digests/YYYY-MM-DD.md
+paperpulse run            # today's ranked, trust-scored digest -> digests/YYYY-MM-DD.md
 ```
 
-👉 **[See a sample digest](examples/sample-digest.md)** — note how the finance
-paper gets a 🚩 *leakage* flag and the hype paper collects four flags while a
+The [sample digest](examples/sample-digest.md) is annotated to show the finance
+paper getting a 🚩 *leakage* flag and the hype paper collecting four flags while a
 careful LoRA study rises to the top.
 
 ---
@@ -142,6 +151,14 @@ pytest
 The full test suite is offline — no network, no keys — so it runs anywhere.
 
 See [`ROADMAP.md`](ROADMAP.md) for what's shipped and what's next.
+
+### Publishing
+
+`pip install build twine && python -m build && twine check dist/*` builds and
+validates the wheel. Cutting a **GitHub Release** then publishes it to PyPI via
+[`release.yml`](.github/workflows/release.yml) (Trusted Publishing — no token in
+the repo; add the publisher once on PyPI first). Or push manually with
+`twine upload dist/*`.
 
 ## License
 
