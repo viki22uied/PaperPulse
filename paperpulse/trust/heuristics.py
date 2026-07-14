@@ -10,7 +10,9 @@ from . import FLAG, OK, WARN, Signal, signal
 STRONG_CLAIMS = re.compile(
     r"\b(state[- ]of[- ]the[- ]art|sota|outperform\w*|significantly|"
     r"substantial\w*|dramatic\w*|novel|first\s+to|best|superior|"
-    r"unprecedented|breakthrough)\b",
+    r"unprecedented|breakthrough|"
+    r"alpha[- ]generating|market[- ]beating|risk[- ]free|guarantee\w*|"
+    r"consistently profitable|outsized returns?)\b",
     re.I,
 )
 HEDGES = re.compile(

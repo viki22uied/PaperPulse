@@ -93,6 +93,7 @@ DEFAULT_SIGNALS = [
     "deployability",
     "leakage",
     "baseline_fairness",
+    "backtest_overfit",
 ]
 
 

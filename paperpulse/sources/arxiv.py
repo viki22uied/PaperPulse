@@ -7,6 +7,7 @@ stdlib XML parser) so ingestion works anywhere Python does.
 from __future__ import annotations
 
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -90,8 +91,15 @@ def _fetch_page(query: str, start: int, page_size: int, timeout: float) -> list[
         f"{API_URL}?{params}",
         headers={"User-Agent": "PaperPulse/0.1 (+https://github.com/)"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        root = ET.fromstring(response.read())
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                root = ET.fromstring(response.read())
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 503) or attempt == 3:
+                raise
+            time.sleep(5 * (attempt + 1))  # back off: arXiv is rate-limiting us
     return [_entry_to_paper(e) for e in root.findall("atom:entry", _NS)]
 
 
