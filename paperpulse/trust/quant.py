@@ -52,6 +52,15 @@ WEAK_BASELINE = re.compile(
     re.I,
 )
 
+BACKTEST_TERMS = re.compile(
+    r"\b(backtest\w*|historical (data|returns?|prices?)|in[- ]sample)\b", re.I
+)
+OUT_OF_SAMPLE_TERMS = re.compile(
+    r"\b(out[- ]of[- ]sample|walk[- ]forward|live trading|paper trading|"
+    r"transaction costs?|slippage)\b",
+    re.I,
+)
+
 
 @signal("subgroup_robustness")
 def subgroup_robustness_signal(paper: Paper, **_) -> Signal:
@@ -128,6 +137,22 @@ def crowding_signal(paper: Paper, *, crowding: float | None = None, **_) -> Sign
             "likely incremental.",
         )
     return Signal("crowding", OK, f"Relatively distinct (crowding {crowding:.2f}).")
+
+
+@signal("backtest_overfit")
+def backtest_overfit_signal(paper: Paper, **_) -> Signal:
+    """Backtested returns without an out-of-sample or cost-aware check are the
+    classic quant-strategy overfitting tell."""
+    text = paper.abstract
+    if BACKTEST_TERMS.search(text) and not OUT_OF_SAMPLE_TERMS.search(text):
+        return Signal(
+            "backtest_overfit",
+            WARN,
+            "Backtested/historical results with no mention of an out-of-sample, "
+            "walk-forward, or transaction-cost check; may be overfit to the "
+            "backtest window.",
+        )
+    return Signal("backtest_overfit", OK, "No backtest-only red flag.")
 
 
 @signal("baseline_fairness")
