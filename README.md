@@ -79,6 +79,7 @@ Turn on `--online` (or `trust_online: true`) to add **dead-link detection** and 
 - **Multiple sources** — arXiv, bioRxiv/medRxiv, and PubMed behind one interface (`paperpulse run --source pubmed`). Adding OpenReview/SSRN is one adapter.
 - **Contradiction mapping** — surfaces pairs of closely-related papers that report opposing outcomes, and a "what changed since last week" diff for a tracked subfield.
 - **Cross-reference your own work** — `paperpulse similar my_model.py` finds papers whose methods are functionally closest to your code or notebook.
+- **Market context for finance papers** — when a paper names a well-known asset (an index, crypto, commodity, or mega-cap), the dashboard tags it with the latest price from Yahoo Finance so you can sanity-check a claim at a glance. Stdlib-only, no API key.
 - **Full-text PDF parsing** (`paperpulse[pdf]`) for sharper trust signals and provenance.
 - **Delivery anywhere** — Markdown file, email (SMTP), RSS feed, or Slack/Discord webhook.
 - **Community trust store** — a self-hostable SQLite DB that pools trust reports across users, supports PubPeer-style annotations, and builds an over-claiming leaderboard.
@@ -95,7 +96,9 @@ python -c "from paperpulse.pipeline import run_digest; from paperpulse.config im
 
 # 3. REST API + web dashboard (stdlib only, no extra deps)
 paperpulse serve            # http://127.0.0.1:8000
-#   GET /api/digest   POST /api/feedback   GET /api/community/leaderboard
+#   Interactive topic-filter bar (Finance / Economics / Quant), loads instantly,
+#   with live price chips on any paper that names a major asset.
+#   GET /api/digest?cats=q-fin.TR,econ.GN   POST /api/feedback   GET /api/community/leaderboard
 ```
 
 Or with Docker:
