@@ -16,83 +16,215 @@ from __future__ import annotations
 import json
 import threading
 import time
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
+from . import market
 from .config import Config
 from .pipeline import apply_feedback, run_digest
 from .sources import available
 
+# Topic filter catalog: group -> [(arXiv category, friendly label), ...]. The
+# dashboard renders these as clickable chips; only categories in this catalog
+# are accepted from the client, so the filter can't inject arbitrary queries.
+TOPIC_CATALOG = {
+    "Finance": [
+        ["q-fin.TR", "Trading & Microstructure"],
+        ["q-fin.PM", "Portfolio Management"],
+        ["q-fin.PR", "Pricing of Securities"],
+        ["q-fin.RM", "Risk Management"],
+        ["q-fin.ST", "Statistical Finance"],
+        ["q-fin.CP", "Computational Finance"],
+        ["q-fin.MF", "Mathematical Finance"],
+        ["q-fin.GN", "General Finance"],
+        ["q-fin.EC", "Economics (q-fin)"],
+    ],
+    "Economics": [
+        ["econ.EM", "Econometrics"],
+        ["econ.GN", "General Economics"],
+        ["econ.TH", "Theoretical Economics"],
+    ],
+    "Quant & Methods": [
+        ["stat.ML", "Machine Learning (stat)"],
+        ["cs.LG", "Machine Learning (CS)"],
+        ["math.OC", "Optimization & Control"],
+        ["math.PR", "Probability"],
+        ["stat.ME", "Statistics Methodology"],
+    ],
+}
+_ALL_CATS = {cat for group in TOPIC_CATALOG.values() for cat, _ in group}
+
 _DIGEST_CACHE_TTL = 300  # seconds; re-fetching arXiv on every page hit is wasteful and slow
-_digest_cache: dict = {}
+_digest_cache: dict = {}  # cats-key -> {"result", "ts"}
 _digest_lock = threading.Lock()
 
 
 def _cached_digest(config: Config):
+    # ponytail: one global lock, so fetches for different filters serialize --
+    # fine for a single-user local tool and it keeps us from hammering arXiv.
+    key = tuple(sorted(config.categories))
     with _digest_lock:
-        cached = _digest_cache.get("result")
-        if cached and time.time() - _digest_cache["ts"] < _DIGEST_CACHE_TTL:
-            return cached
+        entry = _digest_cache.get(key)
+        if entry and time.time() - entry["ts"] < _DIGEST_CACHE_TTL:
+            return entry["result"]
         result = run_digest(config, dry_run=True)
-        _digest_cache["result"] = result
-        _digest_cache["ts"] = time.time()
+        _digest_cache[key] = {"result": result, "ts": time.time()}
         return result
 
-_PAGE = """<!doctype html>
-<html><head><meta charset="utf-8"><title>PaperPulse</title>
+
+def _parse_cats(query: str) -> list[str] | None:
+    """Pull a validated category list out of a ``?cats=a,b,c`` query string."""
+    raw = parse_qs(query).get("cats", [""])[0]
+    cats = [c for c in raw.split(",") if c in _ALL_CATS]
+    return cats or None
+
+
+def _initial_selection(config: Config) -> list[str]:
+    """Which chips start selected, expanding ``q-fin.*`` style wildcards."""
+    sel: set[str] = set()
+    for c in config.categories:
+        if c.endswith(".*"):
+            sel.update(cat for cat in _ALL_CATS if cat.startswith(c[:-1]))
+        elif c in _ALL_CATS:
+            sel.add(c)
+    return sorted(sel)
+
+# Static shell: renders instantly, then fetches /api/digest client-side so the
+# tab never sits blank through the ~25s arXiv fetch. Placeholders are filled by
+# str.replace (not .format) so the JS/CSS braces need no escaping.
+_SHELL = """<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PaperPulse</title>
 <style>
- body{{font-family:system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#111}}
- h1{{margin-bottom:.2rem}} .sub{{color:#666}}
- .card{{border:1px solid #e3e3e3;border-radius:10px;padding:1rem 1.2rem;margin:1rem 0}}
- .bar{{font-family:ui-monospace,monospace;color:#3157ff}}
- .badge{{font-size:.8rem;padding:.1rem .5rem;border-radius:99px;color:#fff}}
- .clean{{background:#1a9d55}} .mixed{{background:#c98a00}} .caution{{background:#c0392b}}
- .flag{{color:#b23}} a{{color:#3157ff;text-decoration:none}}
- @media(prefers-color-scheme:dark){{body{{background:#111;color:#eee}}.card{{border-color:#333}}}}
+ :root{--fg:#111;--muted:#666;--line:#e3e3e3;--accent:#3157ff;--chip:#f2f4f8;--chipfg:#333}
+ @media(prefers-color-scheme:dark){:root{--fg:#eee;--muted:#9aa;--line:#333;--accent:#7c9bff;--chip:#1c2230;--chipfg:#cdd}body{background:#111}}
+ *{box-sizing:border-box}
+ body{font-family:system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;color:var(--fg)}
+ h1{margin:0 0 .1rem} .sub{color:var(--muted);margin-bottom:1rem}
+ .filter{border:1px solid var(--line);border-radius:12px;padding:1rem;margin-bottom:1.2rem}
+ .group{margin:.4rem 0} .group b{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+ .chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.35rem}
+ .chip{border:1px solid var(--line);background:var(--chip);color:var(--chipfg);border-radius:99px;
+   padding:.3rem .7rem;font-size:.85rem;cursor:pointer;user-select:none}
+ .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+ .actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.9rem;align-items:center}
+ .btn{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:8px;
+   padding:.4rem .8rem;font-size:.85rem;cursor:pointer}
+ .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+ .card{border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0}
+ .card h3{margin:.1rem 0 .4rem}
+ .bar{font-family:ui-monospace,monospace;color:var(--accent);font-size:.9rem}
+ .badge{font-size:.75rem;padding:.1rem .5rem;border-radius:99px;color:#fff;margin-left:.3rem}
+ .clean{background:#1a9d55} .mixed{background:#c98a00} .caution{background:#c0392b}
+ .market{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}
+ .tk{font-family:ui-monospace,monospace;font-size:.8rem;background:var(--chip);color:var(--chipfg);
+   border-radius:6px;padding:.15rem .5rem}
+ .up{color:#1a9d55} .down{color:#c0392b}
+ .flags{margin:.5rem 0 .2rem;padding-left:1.1rem} .flags li{color:#c0392b;font-size:.85rem}
+ .meta{color:var(--muted);font-size:.85rem} a{color:var(--accent);text-decoration:none}
+ .status{padding:2rem 0;color:var(--muted);text-align:center}
+ .spin{display:inline-block;width:1.1rem;height:1.1rem;border:2px solid var(--line);
+   border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-.2rem;margin-right:.4rem}
+ @keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
-<h1>PaperPulse</h1><div class="sub">{subtitle}</div>
-{cards}
+<h1>PaperPulse</h1><div class="sub">__SUBTITLE__ · today's ranked, trust-scored papers</div>
+<div class="filter" id="filter"></div>
+<div id="results"><div class="status">Pick topics and press <b>Run</b>.</div></div>
+<script>
+const CATALOG = __CATALOG__;
+let selected = new Set(__SELECTED__);
+const PRESETS = {
+  "All finance": g => g==="Finance",
+  "Economics": g => g==="Economics",
+  "Quant & ML": g => g==="Quant & Methods",
+};
+function renderFilter(){
+  const f = document.getElementById("filter");
+  f.innerHTML = "";
+  for(const [group, cats] of Object.entries(CATALOG)){
+    const gd = document.createElement("div"); gd.className="group";
+    const b = document.createElement("b"); b.textContent = group; gd.appendChild(b);
+    const wrap = document.createElement("div"); wrap.className="chips";
+    for(const [cat,label] of cats){
+      const c = document.createElement("span");
+      c.className = "chip" + (selected.has(cat) ? " on" : "");
+      c.textContent = label;
+      c.title = cat;
+      c.onclick = () => { selected.has(cat) ? selected.delete(cat) : selected.add(cat); renderFilter(); };
+      wrap.appendChild(c);
+    }
+    gd.appendChild(wrap); f.appendChild(gd);
+  }
+  const act = document.createElement("div"); act.className="actions";
+  for(const [name,pred] of Object.entries(PRESETS)){
+    const btn = document.createElement("button"); btn.className="btn"; btn.textContent=name;
+    btn.onclick = () => {
+      selected = new Set();
+      for(const [group,cats] of Object.entries(CATALOG)) if(pred(group)) cats.forEach(([cat])=>selected.add(cat));
+      renderFilter();
+    };
+    act.appendChild(btn);
+  }
+  const clear = document.createElement("button"); clear.className="btn"; clear.textContent="Clear";
+  clear.onclick = () => { selected = new Set(); renderFilter(); };
+  act.appendChild(clear);
+  const run = document.createElement("button"); run.className="btn primary"; run.textContent="Run";
+  run.onclick = load; act.appendChild(run);
+  f.appendChild(act);
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function bar(score){ const w=12, fl=Math.max(0,Math.min(w,Math.round(score*w))); return "\\u2588".repeat(fl)+"\\u2591".repeat(w-fl); }
+async function load(){
+  const res = document.getElementById("results");
+  if(selected.size===0){ res.innerHTML = '<div class="status">Select at least one topic, then press Run.</div>'; return; }
+  res.innerHTML = '<div class="status"><span class="spin"></span>Fetching today\\'s papers from arXiv (~20-30s the first time)…</div>';
+  try{
+    const r = await fetch("/api/digest?cats=" + [...selected].join(","));
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const data = await r.json();
+    render(data.papers || []);
+  }catch(e){
+    res.innerHTML = '<div class="status">Couldn\\'t fetch papers — arXiv may be rate-limiting. Try again in a moment.<br><small>'+esc(e.message)+'</small></div>';
+  }
+}
+function render(papers){
+  const res = document.getElementById("results");
+  if(papers.length===0){ res.innerHTML = '<div class="status">No papers matched. Try more topics.</div>'; return; }
+  res.innerHTML = "";
+  papers.forEach((p,i) => {
+    const t = p.trust || {};
+    const badge = t.badge || "clean";
+    const flags = (t.flags||[]).map(s => '<li>'+esc(s.name)+': '+esc(s.note)+'</li>').join("");
+    const quotes = (p.quotes||[]).map(q => {
+      const chg = q.change_pct==null ? "" :
+        ' <span class="'+(q.change_pct>=0?"up":"down")+'">'+(q.change_pct>=0?"+":"")+q.change_pct+'%</span>';
+      return '<span class="tk">'+esc(q.ticker)+' '+q.price+' '+esc(q.currency)+chg+'</span>';
+    }).join("");
+    const card = document.createElement("div"); card.className="card";
+    card.innerHTML =
+      '<h3>'+(i+1)+'. '+esc(p.title)+'</h3>'+
+      '<div class="bar">'+bar(p.score)+' relevance '+p.score.toFixed(2)+
+        ' <span class="badge '+badge+'">'+badge+'</span></div>'+
+      (quotes ? '<div class="market">'+quotes+'</div>' : '')+
+      (p.summary ? '<p>'+esc(p.summary)+'</p>' : '')+
+      (flags ? '<ul class="flags">'+flags+'</ul>' : '')+
+      '<div class="meta"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">abstract</a> · <code>'+esc(p.id)+'</code></div>';
+    res.appendChild(card);
+  });
+}
+renderFilter();
+load();
+</script>
 </body></html>"""
 
-_CARD = """<div class="card">
- <h3>{i}. {title}</h3>
- <div class="bar">{bar} relevance {score:.2f} <span class="badge {badge}">{badge}</span></div>
- <p>{summary}</p>
- {flags}
- <div><a href="{url}">abstract</a> · <code>{pid}</code></div>
-</div>"""
 
-
-def _bar(score: float, width: int = 12) -> str:
-    filled = max(0, min(width, round(score * width)))
-    return "█" * filled + "░" * (width - filled)
-
-
-def _render_dashboard(config: Config) -> str:
-    result = _cached_digest(config)
-    cards = []
-    for i, item in enumerate(result.ranked, start=1):
-        badge = getattr(item.trust, "badge", "clean") if item.trust else "clean"
-        flags = ""
-        if item.trust and item.trust.flags:
-            flags = "<ul>" + "".join(
-                f'<li class="flag">{s.name}: {s.note}</li>' for s in item.trust.flags
-            ) + "</ul>"
-        cards.append(
-            _CARD.format(
-                i=i,
-                title=item.paper.title,
-                bar=_bar(item.score),
-                score=item.score,
-                badge=badge,
-                summary=(item.summary or ""),
-                flags=flags,
-                url=item.paper.url,
-                pid=item.paper.id,
-            )
-        )
-    subtitle = f"{config.source} · " + " · ".join(config.categories)
-    return _PAGE.format(subtitle=subtitle, cards="\n".join(cards) or "<p>No papers.</p>")
+def _shell_html(config: Config) -> str:
+    return (
+        _SHELL.replace("__CATALOG__", json.dumps(TOPIC_CATALOG))
+        .replace("__SELECTED__", json.dumps(_initial_selection(config)))
+        .replace("__SUBTITLE__", config.source)
+    )
 
 
 def _digest_json(config: Config) -> dict:
@@ -105,6 +237,7 @@ def _digest_json(config: Config) -> dict:
                 "score": round(item.score, 4),
                 "summary": item.summary,
                 "url": item.paper.url,
+                "quotes": market.enrich(f"{item.paper.title} {item.paper.abstract}"),
                 "trust": None
                 if item.trust is None
                 else {
@@ -144,11 +277,13 @@ def make_handler(config: Config):
         def do_GET(self) -> None:
             path = urlparse(self.path).path
             if path == "/":
-                self._send(200, _render_dashboard(config), "text/html; charset=utf-8")
+                self._send(200, _shell_html(config), "text/html; charset=utf-8")
             elif path == "/api/sources":
                 self._json({"sources": available()})
             elif path == "/api/digest":
-                self._json(_digest_json(config))
+                cats = _parse_cats(urlparse(self.path).query)
+                cfg = replace(config, categories=cats) if cats else config
+                self._json(_digest_json(cfg))
             elif path == "/api/community/leaderboard":
                 if not config.community_db:
                     self._json({"error": "community_db not configured"}, 400)
