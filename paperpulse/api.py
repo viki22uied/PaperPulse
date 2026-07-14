@@ -122,6 +122,8 @@ _SHELL = """<!doctype html>
    border-radius:6px;padding:.15rem .5rem}
  .up{color:#1a9d55} .down{color:#c0392b}
  .flags{margin:.5rem 0 .2rem;padding-left:1.1rem} .flags li{color:#c0392b;font-size:.85rem}
+ .why{color:var(--muted);font-style:italic} .conf{color:var(--muted);font-size:.78rem}
+ .prio{font-size:.75rem;padding:.1rem .5rem;border-radius:99px;background:var(--chip);color:var(--chipfg)}
  .meta{color:var(--muted);font-size:.85rem} a{color:var(--accent);text-decoration:none}
  .status{padding:2rem 0;color:var(--muted);text-align:center}
  .spin{display:inline-block;width:1.1rem;height:1.1rem;border:2px solid var(--line);
@@ -195,7 +197,14 @@ function render(papers){
   papers.forEach((p,i) => {
     const t = p.trust || {};
     const badge = t.badge || "clean";
-    const flags = (t.flags||[]).map(s => '<li>'+esc(s.name)+': '+esc(s.note)+'</li>').join("");
+    const flags = (t.flags||[]).map(s => {
+      const why = s.evidence ? ' <span class="why">why: “'+esc(s.evidence)+'”</span>' : "";
+      const conf = (s.confidence!=null && s.confidence<1)
+        ? ' <span class="conf">conf '+Math.round(s.confidence*100)+'%</span>' : "";
+      return '<li>'+esc(s.name)+': '+esc(s.note)+why+conf+'</li>';
+    }).join("");
+    const prio = p.priority!=null
+      ? '<span class="prio" title="relevance × trust — is it worth your time?">worth-it '+p.priority.toFixed(2)+'</span>' : "";
     const quotes = (p.quotes||[]).map(q => {
       const chg = q.change_pct==null ? "" :
         ' <span class="'+(q.change_pct>=0?"up":"down")+'">'+(q.change_pct>=0?"+":"")+q.change_pct+'%</span>';
@@ -205,7 +214,7 @@ function render(papers){
     card.innerHTML =
       '<h3>'+(i+1)+'. '+esc(p.title)+'</h3>'+
       '<div class="bar">'+bar(p.score)+' relevance '+p.score.toFixed(2)+
-        ' <span class="badge '+badge+'">'+badge+'</span></div>'+
+        ' <span class="badge '+badge+'">'+badge+'</span> '+prio+'</div>'+
       (quotes ? '<div class="market">'+quotes+'</div>' : '')+
       (p.summary ? '<p>'+esc(p.summary)+'</p>' : '')+
       (flags ? '<ul class="flags">'+flags+'</ul>' : '')+
@@ -235,6 +244,8 @@ def _digest_json(config: Config) -> dict:
                 "id": item.paper.id,
                 "title": item.paper.title,
                 "score": round(item.score, 4),
+                "priority": round(max(0.0, item.score)
+                                  * (item.trust.score if item.trust else 1.0), 4),
                 "summary": item.summary,
                 "url": item.paper.url,
                 "quotes": market.enrich(f"{item.paper.title} {item.paper.abstract}"),
@@ -244,7 +255,10 @@ def _digest_json(config: Config) -> dict:
                     "score": item.trust.score,
                     "badge": item.trust.badge,
                     "flags": [
-                        {"name": s.name, "status": s.status, "note": s.note}
+                        {
+                            "name": s.name, "status": s.status, "note": s.note,
+                            "evidence": s.evidence, "confidence": s.confidence,
+                        }
                         for s in item.trust.flags
                     ],
                 },

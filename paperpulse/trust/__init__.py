@@ -27,6 +27,8 @@ class Signal:
     status: str  # OK | WARN | FLAG
     note: str
     weight: float = 1.0
+    evidence: str = ""       # exact text that triggered the flag (explainability)
+    confidence: float = 1.0  # how reliable this heuristic's call is, 0-1
 
 
 @dataclass
@@ -79,6 +81,7 @@ def registered() -> list[str]:
 # Import signal modules for their registration side effects.
 from . import heuristics  # noqa: E402,F401
 from . import quant  # noqa: E402,F401
+from . import publication  # noqa: E402,F401
 from . import external  # noqa: E402,F401
 
 
@@ -94,6 +97,7 @@ DEFAULT_SIGNALS = [
     "leakage",
     "baseline_fairness",
     "backtest_overfit",
+    "peer_review",
 ]
 
 

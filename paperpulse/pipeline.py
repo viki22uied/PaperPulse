@@ -63,7 +63,9 @@ def _attach_trust(config: Config, ranked: list[RankedPaper]) -> None:
     context_base = dict(online=config.trust_online)
     signals = config.trust_signals  # None -> library defaults
     if config.trust_online and signals is None:
-        signals = trust_mod.DEFAULT_SIGNALS + ["link_check", "retraction"]
+        signals = trust_mod.DEFAULT_SIGNALS + [
+            "link_check", "retraction", "self_citation",
+        ]
     for item in ranked:
         ctx = trust_mod.SignalContext(crowding=item.crowding, **context_base)
         item.trust = trust_mod.assess(item.paper, enabled=signals, context=ctx)

@@ -38,21 +38,37 @@ BENCHMARK_HYPE = re.compile(
 )
 
 
+def _phrases(matches: list[str], limit: int = 4) -> str:
+    """De-duplicated, comma-joined sample of matched phrases for evidence."""
+    seen: list[str] = []
+    for m in matches:
+        low = m.lower()
+        if low not in [s.lower() for s in seen]:
+            seen.append(m)
+    return ", ".join(seen[:limit])
+
+
 @signal("evidence")
 def evidence_signal(paper: Paper, **_) -> Signal:
     """Strong claims should come with numbers."""
     text = paper.abstract
-    claims = len(STRONG_CLAIMS.findall(text))
+    claims = STRONG_CLAIMS.findall(text)
     has_numbers = bool(NUMERIC_EVIDENCE.search(text))
-    if claims >= 2 and not has_numbers:
+    ev = _phrases(claims)
+    if len(claims) >= 2 and not has_numbers:
         return Signal(
             "evidence",
             FLAG,
             "Strong claims but no quantified results, error bars, or "
             "significance in the abstract.",
+            evidence=ev,
+            confidence=0.7,
         )
-    if claims >= 1 and not has_numbers:
-        return Signal("evidence", WARN, "Makes a claim without numbers in the abstract.")
+    if len(claims) >= 1 and not has_numbers:
+        return Signal(
+            "evidence", WARN, "Makes a claim without numbers in the abstract.",
+            evidence=ev, confidence=0.55,
+        )
     return Signal("evidence", OK, "Claims are backed by quantitative detail.")
 
 
@@ -60,12 +76,19 @@ def evidence_signal(paper: Paper, **_) -> Signal:
 def overclaim_signal(paper: Paper, **_) -> Signal:
     """All-assertive, zero-hedge abstracts are the classic overclaiming tell."""
     text = paper.abstract
-    strong = len(STRONG_CLAIMS.findall(text))
+    strong = STRONG_CLAIMS.findall(text)
     hedged = len(HEDGES.findall(text))
-    if strong >= 3 and hedged == 0:
-        return Signal("overclaim", FLAG, f"{strong} assertive claim words and no hedging.")
-    if strong >= 2 and hedged == 0:
-        return Signal("overclaim", WARN, "Assertive framing with no hedging.")
+    ev = _phrases(strong)
+    if len(strong) >= 3 and hedged == 0:
+        return Signal(
+            "overclaim", FLAG, f"{len(strong)} assertive claim words and no hedging.",
+            evidence=ev, confidence=0.65,
+        )
+    if len(strong) >= 2 and hedged == 0:
+        return Signal(
+            "overclaim", WARN, "Assertive framing with no hedging.",
+            evidence=ev, confidence=0.5,
+        )
     return Signal("overclaim", OK, "Claim language looks measured.")
 
 
@@ -73,21 +96,31 @@ def overclaim_signal(paper: Paper, **_) -> Signal:
 def reproducibility_signal(paper: Paper, *, full_text: str | None = None, **_) -> Signal:
     """Does the paper point to code or data?"""
     haystack = paper.abstract + (full_text or "")
-    if CODE_DATA.search(haystack):
-        return Signal("reproducibility", OK, "Mentions available code or data.")
+    match = CODE_DATA.search(haystack)
+    if match:
+        return Signal(
+            "reproducibility", OK, "Mentions available code or data.",
+            evidence=match.group(0),
+        )
+    # Absence of a keyword is weaker evidence than a positive match, so confidence
+    # is deliberately low -- the code may simply not be named in the abstract.
     return Signal(
-        "reproducibility", WARN, "No mention of released code or data."
+        "reproducibility", WARN, "No mention of released code or data.",
+        confidence=0.4,
     )
 
 
 @signal("saturation")
 def saturation_signal(paper: Paper, **_) -> Signal:
     """SOTA-on-a-benchmark claims deserve a second look."""
-    if BENCHMARK_HYPE.search(paper.abstract):
+    match = BENCHMARK_HYPE.search(paper.abstract)
+    if match:
         return Signal(
             "saturation",
             WARN,
             "Leads with a new-SOTA claim; check the margin and whether the "
             "benchmark is near ceiling.",
+            evidence=match.group(0),
+            confidence=0.6,
         )
     return Signal("saturation", OK, "No benchmark-chasing framing.")

@@ -32,8 +32,15 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ Baseline-fairness heuristic
 - ✅ Dataset-leakage red flag (random splits on time-series/finance)
 - ✅ Reproducibility (code/data link presence)
+- ✅ Peer-review / venue status from arXiv metadata (published vs preprint; flags stale-unaccepted)
+- ✅ Per-flag evidence (the exact phrase that tripped it) + per-signal confidence
+- ✅ "Worth-it" priority score (relevance × trust)
 - 🟡 Dead code/data link detection (`--online`)
 - 🟡 Retraction Watch cross-check (`--online`)
+- 🟡 Self-citation ratio via Semantic Scholar (`--online`; `S2_API_KEY` optional)
+- ⏳ Author conflict-of-interest flag — needs author-affiliation data (not in the arXiv feed)
+- ⏳ "Related work" completeness / citation-graph gaps — needs a citation graph (Semantic Scholar)
+- ⏳ Figure/table manipulation heuristics — needs figure/table extraction from PDFs
 - ⏳ Compute/resource reality check beyond keyword flags
 - ⏳ Replication-status tracker
 

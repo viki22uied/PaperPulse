@@ -62,6 +62,13 @@ cheaply flag the patterns that correlate with weaker work. Each signal is
 deterministic, explains itself, and rolls up into a 🟢 clean / 🟡 mixed /
 🔴 caution badge. Any hard red flag keeps a paper out of "clean".
 
+Every flag is **legible**: it shows the *exact phrase that tripped it* and a
+*confidence* so you can dismiss weak heuristics at a glance, not just a colour.
+A **peer-review / venue** signal separates published or venue-accepted work from
+preprint-only (and flags papers that have sat on arXiv for years, still v1, with
+no venue). Each paper also carries a **worth-it** score — relevance × trust — to
+answer "is this worth my next 30 minutes?"
+
 Several are drawn straight from systematic-trading research discipline:
 
 - **crowding / novelty** — is the method a cosmetic rehash of neighbours in the same batch?
@@ -71,8 +78,9 @@ Several are drawn straight from systematic-trading research discipline:
 - **leakage** — random splits on time-series/financial data (a classic lookahead trap)
 - **baseline fairness**, **evidence / error bars**, **over-claiming**, **benchmark saturation**, **reproducibility (code/data links)**
 
-Turn on `--online` (or `trust_online: true`) to add **dead-link detection** and a
-**Retraction Watch** cross-check.
+Turn on `--online` (or `trust_online: true`) to add **dead-link detection**, a
+**Retraction Watch** cross-check, and a **self-citation ratio** (via Semantic
+Scholar — set `S2_API_KEY` for higher rate limits).
 
 ## Beyond the digest
 

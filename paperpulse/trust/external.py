@@ -7,6 +7,8 @@ unavailable the signal degrades to OK rather than blocking the digest.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import urllib.request
 
@@ -17,6 +19,7 @@ URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
 CODE_HOST_RE = re.compile(r"https?://(github\.com|gitlab\.com|huggingface\.co|zenodo\.org)/\S+", re.I)
 
 RETRACTION_WATCH_API = "https://api.labs.crossref.org/data/retractionwatch"
+S2_PAPER_API = "https://api.semanticscholar.org/graph/v1/paper/arXiv:{}"
 
 
 def _url_ok(url: str, timeout: float = 10.0) -> bool:
@@ -101,3 +104,58 @@ def retraction_signal(paper: Paper, *, online: bool = False, **_) -> Signal:
     except Exception:
         return Signal("retraction", OK, "Retraction check unavailable.")
     return Signal("retraction", OK, "No retraction match found.")
+
+
+def _author_key(author: dict) -> str:
+    """Stable identity for an author: S2 id if present, else normalised name."""
+    if author.get("authorId"):
+        return f"id:{author['authorId']}"
+    return "name:" + re.sub(r"\W+", " ", (author.get("name") or "").lower()).strip()
+
+
+def _self_citation_ratio(arxiv_id: str, timeout: float = 15.0) -> tuple[float, int]:
+    """Fraction of a paper's references that share an author with it, via
+    Semantic Scholar. Returns (ratio, n_references)."""
+    aid = arxiv_id.split("v")[0]  # S2 wants the version-less id
+    url = S2_PAPER_API.format(aid) + "?fields=authors,references.authors"
+    headers = {"User-Agent": "PaperPulse/0.1"}
+    if os.environ.get("S2_API_KEY"):
+        headers["x-api-key"] = os.environ["S2_API_KEY"]
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.loads(response.read())
+    own = {_author_key(a) for a in data.get("authors") or []}
+    refs = [r for r in (data.get("references") or []) if r.get("authors")]
+    if not own or not refs:
+        return 0.0, len(refs)
+    shared = sum(
+        1 for r in refs if own & {_author_key(a) for a in r["authors"]}
+    )
+    return shared / len(refs), len(refs)
+
+
+@signal("self_citation")
+def self_citation_signal(paper: Paper, *, online: bool = False, **_) -> Signal:
+    """Flag papers whose reference list leans heavily on the same authors --
+    a common way to inflate apparent impact."""
+    if not online:
+        return Signal("self_citation", OK, "Self-citation check skipped (offline).")
+    try:
+        ratio, n_refs = _self_citation_ratio(paper.id)
+    except Exception:
+        return Signal("self_citation", OK, "Self-citation check unavailable.")
+    if n_refs < 5:
+        return Signal("self_citation", OK, "Too few references to judge.")
+    if ratio >= 0.4:
+        return Signal(
+            "self_citation",
+            WARN,
+            f"{ratio:.0%} of references share an author with this paper -- "
+            "impact may be self-reinforced.",
+            evidence=f"{ratio:.0%} of {n_refs} references",
+            confidence=0.7,
+        )
+    return Signal(
+        "self_citation", OK, f"Self-citation looks normal ({ratio:.0%}).",
+        evidence=f"{ratio:.0%} of {n_refs} references",
+    )
