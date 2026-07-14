@@ -1,0 +1,18 @@
+services:
+  paperpulse:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./paperpulse.yaml:/app/paperpulse.yaml:ro
+      - paperpulse-data:/data
+    environment:
+      # Optional: uncomment and set to enable LLM summaries / higher rate limits.
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # - NCBI_API_KEY=${NCBI_API_KEY}
+      - PAPERPULSE_STATE=/data/.paperpulse_state.json
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+
+volumes:
+  paperpulse-data:
