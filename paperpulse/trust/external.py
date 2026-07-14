@@ -19,6 +19,17 @@ from . import OK, WARN, FLAG, Signal, signal
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
 _CODE_HOSTS = {"github.com", "gitlab.com", "huggingface.co", "zenodo.org"}
 
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse to follow redirects, so a link that passes the host allowlist
+    can't be used to bounce the request off-host (redirect-based SSRF)."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
+
 RETRACTION_WATCH_API = "https://api.labs.crossref.org/data/retractionwatch"
 S2_PAPER_API = "https://api.semanticscholar.org/graph/v1/paper/arXiv:{}"
 
@@ -28,7 +39,7 @@ def _url_ok(url: str, timeout: float = 10.0) -> bool:
         url, method="HEAD", headers={"User-Agent": "PaperPulse/0.1"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
             return 200 <= response.status < 400
     except Exception:
         # Some hosts reject HEAD; retry with a light GET before giving up.
@@ -36,7 +47,7 @@ def _url_ok(url: str, timeout: float = 10.0) -> bool:
             request = urllib.request.Request(
                 url, headers={"User-Agent": "PaperPulse/0.1"}
             )
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
                 return 200 <= response.status < 400
         except Exception:
             return False
