@@ -91,15 +91,15 @@ def _fetch_page(query: str, start: int, page_size: int, timeout: float) -> list[
         f"{API_URL}?{params}",
         headers={"User-Agent": "PaperPulse/0.1 (+https://github.com/)"},
     )
-    for attempt in range(4):
+    for attempt in range(2):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 root = ET.fromstring(response.read())
             break
         except urllib.error.HTTPError as exc:
-            if exc.code not in (429, 503) or attempt == 3:
+            if exc.code not in (429, 503) or attempt == 1:
                 raise
-            time.sleep(5 * (attempt + 1))  # back off: arXiv is rate-limiting us
+            time.sleep(3)  # back off: arXiv is rate-limiting us
     return [_entry_to_paper(e) for e in root.findall("atom:entry", _NS)]
 
 
@@ -109,7 +109,7 @@ def fetch_recent(
     max_results: int = 200,
     page_size: int = 100,
     extra_query: str = "",
-    timeout: float = 30.0,
+    timeout: float = 10.0,
     pause: float = 3.0,
 ) -> list[Paper]:
     """Fetch the most recent papers across one or more arXiv categories.
