@@ -40,7 +40,7 @@ def _url_ok(url: str, timeout: float = 10.0) -> bool:
     )
     try:
         with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
-            return 200 <= response.status < 400
+            return 200 <= response.status < 300
     except Exception:
         # Some hosts reject HEAD; retry with a light GET before giving up.
         try:
@@ -48,7 +48,7 @@ def _url_ok(url: str, timeout: float = 10.0) -> bool:
                 url, headers={"User-Agent": "PaperPulse/0.1"}
             )
             with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
-                return 200 <= response.status < 400
+                return 200 <= response.status < 300
         except Exception:
             return False
 
