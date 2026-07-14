@@ -94,30 +94,6 @@ def _llm_summary(paper: Paper) -> str | None:
     return None
 
 
-def provenance(summary: str, paper: Paper) -> list[tuple[str, str]]:
-    """Map each summary line back to the abstract sentence it most likely came
-    from, by lexical overlap. Returns ``(summary_line, source_sentence)`` pairs
-    so every claim in the digest can be traced to its origin."""
-    sources = _split_sentences(paper.abstract)
-    if not sources:
-        return []
-
-    def tokens(text: str) -> set[str]:
-        return set(re.findall(r"[a-z0-9]+", text.lower()))
-
-    pairs: list[tuple[str, str]] = []
-    for line in [l for l in summary.splitlines() if l.strip()]:
-        line_tokens = tokens(line)
-        if not line_tokens:
-            continue
-        best = max(
-            sources,
-            key=lambda s: len(tokens(s) & line_tokens) / (len(tokens(s)) + 1),
-        )
-        pairs.append((line.strip(), best))
-    return pairs
-
-
 def summarise(paper: Paper, use_llm: bool = False, max_sentences: int = 3) -> str:
     """Summarise a paper, falling back to the extractive summary whenever the
     LLM path is disabled or unavailable."""

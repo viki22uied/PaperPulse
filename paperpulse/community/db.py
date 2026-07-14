@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,23 +19,7 @@ CREATE TABLE IF NOT EXISTS trust_reports (
     created_at TEXT NOT NULL,
     PRIMARY KEY (paper_id, user)
 );
-CREATE TABLE IF NOT EXISTS annotations (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    paper_id   TEXT NOT NULL,
-    user       TEXT NOT NULL DEFAULT 'anon',
-    body       TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_annotations_paper ON annotations(paper_id);
 """
-
-
-@dataclass
-class Annotation:
-    paper_id: str
-    user: str
-    body: str
-    created_at: str
 
 
 def _now() -> str:
@@ -82,34 +65,6 @@ class CommunityDB:
             ),
         )
         self._conn.commit()
-
-    def consensus_trust(self, paper_id: str) -> dict | None:
-        """Pooled trust for a paper across all users."""
-        row = self._conn.execute(
-            "SELECT AVG(score) AS avg_score, COUNT(*) AS n "
-            "FROM trust_reports WHERE paper_id = ?",
-            (paper_id,),
-        ).fetchone()
-        if not row or row["n"] == 0:
-            return None
-        return {"paper_id": paper_id, "avg_score": row["avg_score"], "reports": row["n"]}
-
-    # --- annotations --------------------------------------------------------
-    def add_annotation(self, paper_id: str, body: str, *, user: str = "anon") -> None:
-        self._conn.execute(
-            "INSERT INTO annotations (paper_id, user, body, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (paper_id, user, body, _now()),
-        )
-        self._conn.commit()
-
-    def annotations(self, paper_id: str) -> list[Annotation]:
-        rows = self._conn.execute(
-            "SELECT paper_id, user, body, created_at FROM annotations "
-            "WHERE paper_id = ? ORDER BY created_at",
-            (paper_id,),
-        ).fetchall()
-        return [Annotation(**dict(r)) for r in rows]
 
     # --- leaderboard --------------------------------------------------------
     def flag_leaderboard(self, limit: int = 20) -> list[dict]:
