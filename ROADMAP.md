@@ -114,6 +114,14 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ Paste code/notebook → rank papers by method-level similarity
 - ⏳ Structured method-vs-implementation diff
 
+## Dashboard / tracked-factor UX
+- ✅ Dashboard filter presets (F1): one-click "Region: USA only", "Known
+  factor families only", "Untested regions only" buttons in the web
+  dashboard, filtering client-side over the already-fetched digest.
+- ✅ `paperpulse factors check` (F2): re-runs today's digest and reports
+  "new evidence" on any tracked dead/weak factor -- new meaning not matched
+  in the last 7 days (`last_seen_at` on the shared topics log).
+
 ## Summarization & delivery
 - ✅ 3-bullet plain-English digest (extractive default; LLM optional)
 - ✅ Trust-score badge alongside each summary
