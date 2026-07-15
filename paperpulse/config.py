@@ -47,6 +47,7 @@ class Config:
     output_dir: str = "digests"
     state_path: str = ".paperpulse_state.json"
     community_db: str = ""  # path to shared SQLite trust store, "" = disabled
+    topics_db: str = ""  # path to known/already-tried topics log, "" = disabled
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Config":

@@ -59,13 +59,18 @@ def _cmd_feedback(args: argparse.Namespace) -> int:
         print("Nothing to do: pass --like and/or --dislike with paper ids.")
         return 1
     profile = apply_feedback(
-        config, args.like or [], args.dislike or [], user=args.user
+        config, args.like or [], args.dislike or [], user=args.user, reason=args.reason
     )
     print(
         f"Profile '{args.user}' updated from {len(args.like or [])} likes and "
         f"{len(args.dislike or [])} dislikes "
         f"({profile.n_feedback} feedback signals total)."
     )
+    if args.reason in ("crowded", "weak-result", "already-tried"):
+        if config.topics_db:
+            print(f"Also logged {len(args.dislike or [])} dislike(s) to {config.topics_db}.")
+        else:
+            print("Set `topics_db` in paperpulse.yaml to also log this reason.")
     return 0
 
 
@@ -118,6 +123,47 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_factors_add(args: argparse.Namespace) -> int:
+    from .topics import TopicLog
+
+    config = Config.load(args.config)
+    db_path = config.topics_db or "paperpulse_topics.db"
+    log = TopicLog(db_path)
+    try:
+        log.add(
+            args.name,
+            aliases=args.aliases.split(",") if args.aliases else [],
+            source=args.source,
+            result=args.result,
+            region=args.region or "",
+            notes=args.notes or "",
+        )
+    finally:
+        log.close()
+    print(f"Logged '{args.name}' ({args.source}, {args.result}) to {db_path}.")
+    return 0
+
+
+def _cmd_factors_list(args: argparse.Namespace) -> int:
+    from .topics import TopicLog
+
+    config = Config.load(args.config)
+    db_path = config.topics_db or "paperpulse_topics.db"
+    log = TopicLog(db_path)
+    try:
+        entries = log.all()
+    finally:
+        log.close()
+    if not entries:
+        print(f"No topics logged yet in {db_path}.")
+        return 0
+    for e in entries:
+        aliases = f" [{', '.join(e.aliases)}]" if e.aliases else ""
+        region = f" region={e.region}" if e.region else ""
+        print(f"- {e.name}{aliases}: {e.source}/{e.result}{region} {e.notes}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="paperpulse", description="Relevance-ranked, trust-scored arXiv digests."
@@ -146,6 +192,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_fb.add_argument("--user", default="default")
     p_fb.add_argument("--like", nargs="+", default=None, metavar="ID")
     p_fb.add_argument("--dislike", nargs="+", default=None, metavar="ID")
+    p_fb.add_argument(
+        "--reason",
+        choices=["irrelevant", "crowded", "weak-result", "already-tried"],
+        default=None,
+        help="why the dislikes were disliked; crowded/weak-result/already-tried "
+        "also log the topic to `topics_db`",
+    )
     p_fb.set_defaults(func=_cmd_feedback)
 
     p_sim = sub.add_parser(
@@ -160,6 +213,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_note.add_argument("text", nargs="?", default=None, help="omit to list existing notes")
     p_note.add_argument("--user", default="default")
     p_note.set_defaults(func=_cmd_note)
+
+    p_factors = sub.add_parser(
+        "factors", help="known/already-tried factor log (shared by A2 + D2)"
+    )
+    factors_sub = p_factors.add_subparsers(dest="factors_command", required=True)
+
+    p_factors_add = factors_sub.add_parser("add", help="log a factor/topic")
+    p_factors_add.add_argument("name")
+    p_factors_add.add_argument("--aliases", default=None, help="comma-separated")
+    p_factors_add.add_argument(
+        "--source", choices=["manual", "literature"], default="manual"
+    )
+    p_factors_add.add_argument(
+        "--result", choices=sorted({"dead", "weak", "promising", "untested"}), default="untested"
+    )
+    p_factors_add.add_argument("--region", default=None)
+    p_factors_add.add_argument("--notes", default=None)
+    p_factors_add.set_defaults(func=_cmd_factors_add)
+
+    p_factors_list = factors_sub.add_parser("list", help="list logged factors/topics")
+    p_factors_list.set_defaults(func=_cmd_factors_list)
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)

@@ -35,3 +35,11 @@ summary_sentences: 3
 # Output.
 output_dir: digests
 state_path: .paperpulse_state.json
+
+# Optional: path to a shared SQLite log of known factor families (from the
+# literature) and topics you've already tried yourself. When set, a fully
+# offline `known_topic` trust signal flags papers that match an entry --
+# 🔴 if logged dead/weak, 🟡 if it's just a known factor family worth a
+# crowding check. Grow it with `paperpulse factors add "name" --aliases "a,b"
+# --source literature|manual --result dead|weak|promising|untested`.
+topics_db: ""

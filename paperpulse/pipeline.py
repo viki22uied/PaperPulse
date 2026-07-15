@@ -66,6 +66,17 @@ def _attach_trust(config: Config, ranked: list[RankedPaper]) -> None:
         signals = trust_mod.DEFAULT_SIGNALS + [
             "link_check", "retraction", "self_citation", "related_work",
         ]
+
+    topics = None
+    if config.topics_db:
+        from .topics import TopicLog
+
+        log = TopicLog(config.topics_db)
+        try:
+            topics = log.all()
+        finally:
+            log.close()
+
     for item in ranked:
         full_text = None
         if config.trust_online:
@@ -73,7 +84,7 @@ def _attach_trust(config: Config, ranked: list[RankedPaper]) -> None:
 
             full_text = fetch_full_text(item.paper)
         ctx = trust_mod.SignalContext(
-            crowding=item.crowding, full_text=full_text, **context_base
+            crowding=item.crowding, full_text=full_text, topics=topics, **context_base
         )
         item.trust = trust_mod.assess(item.paper, enabled=signals, context=ctx)
 
@@ -164,14 +175,46 @@ def run_digest(
     )
 
 
+# Maps a `feedback --reason` to what gets logged in the shared topics table.
+# "irrelevant" doesn't imply anything about the topic itself, so it logs nothing.
+_DISLIKE_REASON_RESULT = {"crowded": "weak", "weak-result": "weak", "already-tried": "dead"}
+
+
+def _log_dislike_reason(config: Config, state: State, disliked_ids: list[str], reason: str | None) -> None:
+    result = _DISLIKE_REASON_RESULT.get(reason or "")
+    if not result or not config.topics_db:
+        return
+    from .topics import TopicLog
+
+    log = TopicLog(config.topics_db)
+    try:
+        for pid in disliked_ids:
+            record = state.shown.get(pid)
+            if not record:
+                continue
+            log.add(
+                record["title"],
+                source="manual",
+                result=result,
+                notes=f"via feedback --reason {reason}",
+            )
+    finally:
+        log.close()
+
+
 def apply_feedback(
     config: Config,
     liked_ids: list[str],
     disliked_ids: list[str],
     *,
     user: str = DEFAULT_USER,
+    reason: str | None = None,
 ) -> InterestProfile:
-    """Update the stored interest profile from thumbs-up / thumbs-down ids."""
+    """Update the stored interest profile from thumbs-up / thumbs-down ids.
+
+    ``reason`` (on dislikes) optionally routes into the shared known/tried
+    topics log -- see ``_DISLIKE_REASON_RESULT`` -- so a dislike becomes an
+    explicit, growing record instead of just nudging the embedding vector."""
     backend = _load_backend(config)
     state = State.load(config.state_path)
     profile = ensure_profile(config, state, backend, user)
@@ -193,6 +236,7 @@ def apply_feedback(
     profile.update(embed(liked_ids), embed(disliked_ids))
     profile.liked_ids.extend(liked_ids)
     profile.disliked_ids.extend(disliked_ids)
+    _log_dislike_reason(config, state, disliked_ids, reason)
 
     state.set_profile(profile, user)
     state.save(config.state_path)

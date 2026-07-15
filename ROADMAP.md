@@ -42,6 +42,24 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ⏳ Compute/resource reality check beyond keyword flags
 - ⏳ Replication-status tracker
 
+## Known factor families / already-tried log
+- ✅ Shared SQLite log (`topics_db`) unifying "known factor family from the
+  literature" and "I already tried this myself" -- `source` field
+  distinguishes them, `result` (dead/weak/promising/untested) drives the flag
+- ✅ `paperpulse factors add "name" --aliases a,b --source manual|literature
+  --result dead|weak|promising|untested` / `paperpulse factors list`
+- ✅ Fully offline `known_topic` trust signal: exact/near-exact name-or-alias
+  match against title+abstract -- 🔴 flag if logged dead/weak, 🟡 warn if it's
+  a known factor family with no verdict yet
+- ✅ `--reason crowded|weak-result|already-tried` on `paperpulse feedback
+  --dislike` auto-logs the disliked paper's title into this same log
+  (`crowded`/`weak-result` -> `weak`, `already-tried` -> `dead`;
+  `irrelevant` logs nothing, since it says nothing about the topic itself)
+- ⏳ Inverse interest profile (`avoid_topics` subtracted from the ranking
+  score, not just post-hoc dislikes)
+- ⏳ Semantic (embedding) cross-reference against the log, beyond the current
+  deterministic name/alias match
+
 ## Quant-derived trust signals
 - ✅ Novelty-vs-crowding score (batch embedding similarity)
 - ✅ Subgroup-robustness check
