@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
+from pathlib import Path
 
 from .config import Config, DEFAULT_CONFIG_PATH
 from .pipeline import apply_feedback, find_similar_to_work, run_digest
@@ -13,11 +15,18 @@ def _cmd_init(args: argparse.Namespace) -> int:
     if DEFAULT_CONFIG_PATH.exists() and not args.force:
         print(f"{DEFAULT_CONFIG_PATH} already exists (use --force to overwrite).")
         return 1
-    path = Config().save()
+    config = Config()
+    if args.seed_avoid:
+        text = Path(args.seed_avoid).read_text()
+        topics = [t.strip() for t in re.split(r"[,\n]", text) if t.strip()]
+        config.avoid_topics = topics
+    path = config.save()
     print(
         f"Wrote starter config to {path}. Edit `interests`, `categories`, and "
         f"`source`, then run `paperpulse run`."
     )
+    if args.seed_avoid:
+        print(f"Seeded {len(config.avoid_topics)} avoid_topics from {args.seed_avoid}.")
     return 0
 
 
@@ -173,6 +182,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_init = sub.add_parser("init", help="write a starter config file")
     p_init.add_argument("--force", action="store_true")
+    p_init.add_argument(
+        "--seed-avoid",
+        default=None,
+        metavar="FILE",
+        help="comma/newline-separated factor names to seed `avoid_topics` from",
+    )
     p_init.set_defaults(func=_cmd_init)
 
     p_run = sub.add_parser("run", help="fetch, rank, score, and write the digest")

@@ -18,6 +18,13 @@ interests: >
 # profile a stronger start.
 seed_papers: []
 
+# Optional: factor/topic names to actively rank DOWN (e.g. things you've
+# already worked on extensively). Unlike thumbs-down feedback, this applies
+# from the very first run, before any Rocchio feedback has been given.
+# Seed it from a file with `paperpulse init --seed-avoid factors.txt`.
+avoid_topics: []
+avoid_weight: 0.5   # how strongly avoid_topics pulls scores down
+
 # How many recent papers to consider each run.
 max_results: 200
 

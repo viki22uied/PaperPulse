@@ -16,13 +16,24 @@ from .profile import InterestProfile
 
 
 def score_papers(
-    papers: list[Paper], profile: InterestProfile, backend: EmbeddingBackend
+    papers: list[Paper],
+    profile: InterestProfile,
+    backend: EmbeddingBackend,
+    *,
+    avoid_vector: np.ndarray | None = None,
+    avoid_weight: float = 0.5,
 ) -> tuple[list[float], np.ndarray]:
-    """Return the relevance score for each paper and their embedding matrix."""
+    """Return the relevance score for each paper and their embedding matrix.
+
+    ``avoid_vector`` (from ``Config.avoid_topics``) is subtracted straight from
+    the score -- unlike Rocchio feedback, this applies even to a cold-start
+    profile that hasn't seen a single like/dislike yet."""
     if not papers:
         return [], np.zeros((0, profile.vector.shape[0]), dtype=np.float32)
     matrix = backend.encode([p.as_text() for p in papers])
     scores = matrix @ profile.vector
+    if avoid_vector is not None:
+        scores = scores - avoid_weight * (matrix @ avoid_vector)
     return scores.tolist(), matrix
 
 
@@ -76,12 +87,16 @@ def rank_papers(
     top_n: int = 5,
     diversity: float = 0.3,
     min_score: float = 0.0,
+    avoid_vector: np.ndarray | None = None,
+    avoid_weight: float = 0.5,
 ) -> list[RankedPaper]:
     """Rank ``papers`` and return the top ``top_n`` as ``RankedPaper``s.
 
     Each returned paper carries its ``crowding`` score for downstream trust
     signals."""
-    scores, matrix = score_papers(papers, profile, backend)
+    scores, matrix = score_papers(
+        papers, profile, backend, avoid_vector=avoid_vector, avoid_weight=avoid_weight
+    )
     if not scores:
         return []
 

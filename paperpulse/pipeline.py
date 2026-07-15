@@ -127,6 +127,14 @@ def run_digest(
     if skip_seen:
         papers = [p for p in papers if p.id not in state.seen_ids]
 
+    avoid_vector = None
+    if config.avoid_topics:
+        avoid_matrix = backend.encode(list(config.avoid_topics))
+        avoid_vector = avoid_matrix.mean(axis=0)
+        norm = float(np.linalg.norm(avoid_vector))
+        if norm:
+            avoid_vector = avoid_vector / norm
+
     ranked = rank_papers(
         papers,
         profile,
@@ -134,6 +142,8 @@ def run_digest(
         top_n=config.top_n,
         diversity=config.diversity,
         min_score=config.min_score,
+        avoid_vector=avoid_vector,
+        avoid_weight=config.avoid_weight,
     )
 
     _attach_trust(config, ranked)
