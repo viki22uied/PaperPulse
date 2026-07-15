@@ -36,6 +36,28 @@ def test_add_and_all_round_trip():
         assert "board composition" in entries[0].aliases
 
 
+def test_created_at_survives_reverdicting_same_topic():
+    # Re-adding an existing name updates its verdict but must not reset
+    # created_at -- otherwise "first logged" silently becomes "last updated"
+    # every time you revisit a factor, destroying the one timestamp the log
+    # keeps (see paperpulse/topics.py TopicLog.add).
+    with tempfile.TemporaryDirectory() as tmp:
+        db = TopicLog(Path(tmp) / "t.db")
+        try:
+            db.add("board diversity", source="manual", result="dead", notes="no edge")
+            first_created_at = db.all()[0].created_at
+            assert first_created_at
+
+            db.add("board diversity", source="manual", result="promising", notes="works now")
+            entries = db.all()
+            assert len(entries) == 1
+            assert entries[0].created_at == first_created_at
+            assert entries[0].result == "promising"
+            assert entries[0].notes == "works now"
+        finally:
+            db.close()
+
+
 def test_mark_seen_updates_last_seen_at():
     with tempfile.TemporaryDirectory() as tmp:
         db = TopicLog(Path(tmp) / "t.db")

@@ -42,6 +42,7 @@ class TopicEntry:
     region: str = ""
     notes: str = ""
     last_seen_at: str = ""
+    created_at: str = ""
 
 
 def _now() -> str:
@@ -82,10 +83,16 @@ class TopicLog:
     ) -> None:
         if result not in RESULTS:
             raise ValueError(f"result must be one of {sorted(RESULTS)}")
+        # INSERT ... ON CONFLICT (not INSERT OR REPLACE) so re-logging an
+        # existing name updates its verdict without clobbering created_at --
+        # otherwise "first logged" silently resets to "last updated" on every
+        # revisit, and there's no way to tell how long a verdict has stood.
         self._conn.execute(
-            "INSERT OR REPLACE INTO topics "
-            "(name, aliases, source, result, region, notes, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO topics (name, aliases, source, result, region, notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET "
+            "aliases=excluded.aliases, source=excluded.source, result=excluded.result, "
+            "region=excluded.region, notes=excluded.notes",
             (name, ",".join(aliases or []), source, result, region, notes, _now()),
         )
         self._conn.commit()
@@ -101,6 +108,7 @@ class TopicLog:
                 region=r["region"],
                 notes=r["notes"],
                 last_seen_at=r["last_seen_at"],
+                created_at=r["created_at"],
             )
             for r in rows
         ]
