@@ -134,7 +134,7 @@ exercised by you once keys/egress are in place — they fail soft until then.
 ## Community / social layer
 - ✅ Self-hostable shared trust store (SQLite) to pool scores across users
 - ✅ Over-claiming leaderboard by author/venue
-- ⏳ Per-paper annotation layer (PubPeer-style)
+- ✅ Per-paper annotation layer (`paperpulse note`, needs `community_db`)
 - ⏳ Hosted public instance + moderation
 
 ## Infra / meta
@@ -142,3 +142,8 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ Self-hostable via Docker / docker-compose
 - ✅ Config-driven sources / signals / delivery
 - ✅ Offline test suite, CI across Python 3.10–3.12
+- ✅ End-to-end verification: `tests/test_end_to_end_roadmap.py` seeds
+  `avoid_topics` + a `topics_db` "dead" entry for board diversity, runs a
+  full digest against a synthetic batch, and confirms the board-diversity
+  paper both scores lower than unrelated papers (avoid_topics) and carries
+  a `known_topic` flag citing the logged reason (A1/A2/D2 working together)
