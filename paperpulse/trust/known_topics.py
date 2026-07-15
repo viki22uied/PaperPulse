@@ -30,6 +30,14 @@ def known_topic_signal(
         if match.notes:
             note += f" Notes: {match.notes}"
         return Signal("known_topic", FLAG, note, evidence=match.name, confidence=0.8)
+    if match.result == "promising":
+        # A topic YOU logged as promising is a positive prior finding, not a
+        # caution -- treating it the same as "untested" would misrepresent
+        # your own research as a reason to be careful.
+        note = f"Matches a topic previously logged as promising: {label}."
+        if match.notes:
+            note += f" Notes: {match.notes}"
+        return Signal("known_topic", OK, note, evidence=match.name, confidence=0.6)
     return Signal(
         "known_topic",
         WARN,
