@@ -7,6 +7,18 @@ categories:
   - cs.LG
   - cs.CL
 
+# Quant equity research preset (WorldQuant BRAIN-style factor research):
+# uncomment to pull from the categories that actually carry factor/portfolio
+# methodology papers, rather than just cs.LG/cs.CL.
+# categories:
+#   - q-fin.PM   # portfolio management
+#   - q-fin.ST   # statistical finance
+#   - q-fin.TR   # trading and market microstructure
+#   - q-fin.RM   # risk management
+#   - econ.EM    # econometrics
+#   - econ.GN    # general economics
+#   - stat.AP    # applied statistics (often has factor-model methodology)
+
 # A short paragraph describing what you care about. This seeds the interest
 # vector; feedback refines it from there.
 interests: >

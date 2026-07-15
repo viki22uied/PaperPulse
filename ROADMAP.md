@@ -13,7 +13,13 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ arXiv API pull by category / keyword / author
 - 🟡 bioRxiv / medRxiv source (real API; validate live)
 - 🟡 PubMed source via NCBI E-utilities (real API; `NCBI_API_KEY` optional)
-- ⏳ OpenReview and SSRN adapters (interface ready — one class each)
+- 🟡 SSRN source (C2), via OpenAlex rather than a direct scraper -- spike
+  found no official SSRN API, and existing third-party scrapers sit in a
+  ToS/robots.txt grey area we didn't want to inherit. OpenAlex indexes SSRN
+  as a first-class source ("SSRN Electronic Journal", ~1.6M works) through
+  its own free, keyless, official REST API, so `paperpulse/sources/ssrn.py`
+  never touches ssrn.com directly. `paperpulse run --source ssrn`.
+- ⏳ OpenReview adapter (interface ready — one class)
 - 🟡 Scheduled daily/weekly runs (cron + GitHub Action provided)
 - ⏳ Full-text PDF parsing and table/figure extraction
 

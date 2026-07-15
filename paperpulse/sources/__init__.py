@@ -10,5 +10,6 @@ from .base import Query, Source, available, get_source, register
 from . import arxiv  # noqa: F401,E402
 from . import biorxiv  # noqa: F401,E402
 from . import pubmed  # noqa: F401,E402
+from . import ssrn  # noqa: F401,E402
 
 __all__ = ["Query", "Source", "available", "get_source", "register"]
