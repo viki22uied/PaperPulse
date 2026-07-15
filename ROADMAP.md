@@ -36,6 +36,13 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - 🟡 Dead code/data link detection (`--online`)
 - 🟡 Retraction Watch cross-check (`--online`)
 - 🟡 Self-citation ratio via Semantic Scholar (`--online`; `S2_API_KEY` optional)
+- ✅ Weak/null-result badge (`weak_result` signal): regex over full text
+  (falls back to the abstract) for weak-result language, with a same-sentence
+  override so positive framings ("no significant difference ... confirming
+  robustness") don't misfire. Validated against a 20-abstract labeled sample
+  (`tests/test_weak_result_validation.py`): 0% false positives, 90% true
+  positives -- stays a soft WARN badge regardless, never a hard FLAG, since
+  it's pattern-matching on the *finding*, not the methodology.
 - ⏳ Author conflict-of-interest flag — needs author-affiliation data (not in the arXiv feed)
 - ⏳ "Related work" completeness / citation-graph gaps — needs a citation graph (Semantic Scholar)
 - ⏳ Figure/table manipulation heuristics — needs figure/table extraction from PDFs

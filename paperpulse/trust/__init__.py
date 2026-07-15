@@ -86,6 +86,7 @@ from . import quant  # noqa: E402,F401
 from . import publication  # noqa: E402,F401
 from . import external  # noqa: E402,F401
 from . import known_topics  # noqa: E402,F401
+from . import results  # noqa: E402,F401
 
 
 DEFAULT_SIGNALS = [
@@ -102,6 +103,7 @@ DEFAULT_SIGNALS = [
     "backtest_overfit",
     "peer_review",
     "known_topic",
+    "weak_result",
 ]
 
 
