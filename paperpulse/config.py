@@ -67,11 +67,11 @@ class Config:
         path = Path(path) if path else DEFAULT_CONFIG_PATH
         if not path.exists():
             return cls()
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         known = {f for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in data.items() if k in known})
 
     def save(self, path: str | Path | None = None) -> Path:
         path = Path(path) if path else DEFAULT_CONFIG_PATH
-        path.write_text(yaml.safe_dump(asdict(self), sort_keys=False))
+        path.write_text(yaml.safe_dump(asdict(self), sort_keys=False), encoding="utf-8")
         return path

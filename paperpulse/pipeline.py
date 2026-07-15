@@ -241,7 +241,7 @@ def run_digest(
         out_dir = Path(config.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         output_path = out_dir / f"{date.today().isoformat()}.md"
-        output_path.write_text(markdown)
+        output_path.write_text(markdown, encoding="utf-8")
         state.save(config.state_path)
 
     return DigestResult(
