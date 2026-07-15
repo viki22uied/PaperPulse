@@ -80,6 +80,18 @@ def test_known_topic_signal_warns_on_known_family():
     assert report.signals[0].status == trust.WARN
 
 
+def test_known_topic_signal_ok_not_warn_on_promising():
+    # A topic YOU logged as promising is a positive prior finding -- treating
+    # it the same as "untested" would misrepresent your own research as a
+    # reason for caution (see paperpulse/trust/known_topics.py).
+    entries = [TopicEntry(name="quality minus junk", result="promising", source="manual", notes="worked in my backtest")]
+    paper = _paper("Quality minus junk revisited")
+    ctx = trust.SignalContext(topics=entries)
+    report = trust.assess(paper, enabled=["known_topic"], context=ctx)
+    assert report.signals[0].status == trust.OK
+    assert "promising" in report.signals[0].note.lower()
+
+
 def test_known_topic_signal_ok_when_unconfigured():
     paper = _paper("Some unrelated paper")
     report = trust.assess(paper, enabled=["known_topic"])
