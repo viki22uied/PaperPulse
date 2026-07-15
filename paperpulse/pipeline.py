@@ -57,7 +57,16 @@ def _fetch(config: Config) -> list[Paper]:
     return source.fetch(query)
 
 
-def _attach_trust(config: Config, ranked: list[RankedPaper]) -> None:
+def _literature_reference_texts(topics: list) -> list[str]:
+    from .literature import CANONICAL_FACTOR_PAPERS
+
+    topic_texts = [
+        " ".join([t.name, *t.aliases, t.notes]).strip() for t in (topics or [])
+    ]
+    return CANONICAL_FACTOR_PAPERS + [t for t in topic_texts if t]
+
+
+def _attach_trust(config: Config, ranked: list[RankedPaper], backend=None) -> None:
     if not config.trust:
         return
     context_base = dict(online=config.trust_online)
@@ -77,14 +86,30 @@ def _attach_trust(config: Config, ranked: list[RankedPaper]) -> None:
         finally:
             log.close()
 
+    literature_matrix = None
+    if backend is not None:
+        reference_texts = _literature_reference_texts(topics)
+        if reference_texts:
+            literature_matrix = backend.encode(reference_texts)
+
     for item in ranked:
         full_text = None
         if config.trust_online:
             from .fulltext import fetch_full_text
 
             full_text = fetch_full_text(item.paper)
+
+        literature_crowding = None
+        if literature_matrix is not None and backend is not None:
+            paper_vec = backend.encode([item.paper.as_text()])[0]
+            literature_crowding = float((literature_matrix @ paper_vec).max())
+
         ctx = trust_mod.SignalContext(
-            crowding=item.crowding, full_text=full_text, topics=topics, **context_base
+            crowding=item.crowding,
+            full_text=full_text,
+            topics=topics,
+            literature_crowding=literature_crowding,
+            **context_base,
         )
         item.trust = trust_mod.assess(item.paper, enabled=signals, context=ctx)
 
@@ -186,7 +211,7 @@ def run_digest(
         avoid_weight=config.avoid_weight,
     )
 
-    _attach_trust(config, ranked)
+    _attach_trust(config, ranked, backend=backend)
     _attach_regions(config, ranked)
     ranked = _filter_regions(config, ranked)
 

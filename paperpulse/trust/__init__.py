@@ -62,6 +62,8 @@ class SignalContext:
     online: bool = False
     # Loaded once per digest run (not per paper) from the configured topics DB.
     topics: list | None = None
+    # Max cosine similarity to the canonical-literature reference set (E2).
+    literature_crowding: float | None = None
 
 
 SignalFn = Callable[..., Signal]
@@ -104,6 +106,10 @@ DEFAULT_SIGNALS = [
     "peer_review",
     "known_topic",
     "weak_result",
+    "literature_novelty",
+    "survivorship_bias",
+    "transaction_cost_omission",
+    "single_market_period",
 ]
 
 
@@ -121,6 +127,7 @@ def assess(
         "full_text": ctx.full_text,
         "online": ctx.online,
         "topics": ctx.topics,
+        "literature_crowding": ctx.literature_crowding,
     }
 
     signals: list[Signal] = []

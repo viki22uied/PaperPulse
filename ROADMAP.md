@@ -93,6 +93,16 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ Benchmark-saturation flag
 - ✅ Real-world deployability check
 - ✅ Backtest-overfitting flag (no out-of-sample / walk-forward / cost check)
+- ✅ Survivorship-bias flag (E1): backtest with no mention of delisted/failed firms
+- ✅ Transaction-cost-omission flag (E1): trading strategy with no cost/slippage mention
+- ✅ Single-market/period flag (E1): no mention of testing across regimes/markets/periods
+- ✅ Novelty vs. known literature (E2): `literature_novelty` signal compares
+  each paper against a fixed canonical-factor reference set (Fama-French,
+  Carhart, momentum, betting-against-beta, quality-minus-junk, gross
+  profitability, low-vol anomaly) plus the known-topics log, independent of
+  today's batch. Validated per the shared sub-requirement
+  (`tests/test_literature_novelty.py`): 0% false positives, 80% true
+  positives with the default hashing backend -- soft WARN only, never FLAG.
 - ⏳ Config-driven per-domain confound checklists (scaffold in config)
 
 ## Contradiction & context mapping

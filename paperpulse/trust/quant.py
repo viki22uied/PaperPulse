@@ -61,6 +61,25 @@ OUT_OF_SAMPLE_TERMS = re.compile(
     re.I,
 )
 
+TRADING_STRATEGY_TERMS = re.compile(
+    r"\b(trading strategy|trading rule|portfolio strategy|long[- /]short|"
+    r"alpha (signal|strategy))\b",
+    re.I,
+)
+SURVIVORSHIP_TERMS = re.compile(
+    r"\b(surviv\w*|delist\w*|bankrupt\w*|dead firms?)\b", re.I
+)
+COST_TERMS = re.compile(
+    r"\b(transaction costs?|slippage|trading costs?|market impact|commission\w*)\b",
+    re.I,
+)
+CROSS_REGIME_TERMS = re.compile(
+    r"\b(multiple (markets|periods|regimes)|across (markets|regions|"
+    r"time periods|asset classes|cycles)|robust\w* across|"
+    r"out[- ]of[- ]sample periods?|different (market )?regimes?)\b",
+    re.I,
+)
+
 
 @signal("subgroup_robustness")
 def subgroup_robustness_signal(paper: Paper, **_) -> Signal:
@@ -157,6 +176,32 @@ def crowding_signal(paper: Paper, *, crowding: float | None = None, **_) -> Sign
     return Signal("crowding", OK, f"Relatively distinct (crowding {crowding:.2f}).")
 
 
+@signal("literature_novelty")
+def literature_novelty_signal(
+    paper: Paper, *, literature_crowding: float | None = None, **_
+) -> Signal:
+    """Novelty vs. the *known literature* (E2), not just today's batch --
+    ``literature_crowding`` (supplied by the pipeline) is the paper's max
+    cosine similarity to a fixed reference set of canonical factor papers
+    plus anything logged in the known/tried topics store."""
+    if literature_crowding is None:
+        return Signal("literature_novelty", OK, "Literature novelty not evaluated.")
+    if literature_crowding >= 0.5:
+        return Signal(
+            "literature_novelty",
+            WARN,
+            f"Very similar to well-known factor literature (similarity "
+            f"{literature_crowding:.2f}); may be a rehash of an established "
+            "factor rather than a genuinely new data source.",
+            evidence=f"literature similarity {literature_crowding:.2f}",
+            confidence=0.5,
+        )
+    return Signal(
+        "literature_novelty", OK,
+        f"Distinct from known factor literature (similarity {literature_crowding:.2f}).",
+    )
+
+
 @signal("backtest_overfit")
 def backtest_overfit_signal(paper: Paper, **_) -> Signal:
     """Backtested returns without an out-of-sample or cost-aware check are the
@@ -174,6 +219,59 @@ def backtest_overfit_signal(paper: Paper, **_) -> Signal:
             confidence=0.6,
         )
     return Signal("backtest_overfit", OK, "No backtest-only red flag.")
+
+
+@signal("survivorship_bias")
+def survivorship_bias_signal(paper: Paper, **_) -> Signal:
+    """Backtests that never mention delisted/failed firms are a classic
+    survivorship-bias tell -- the sample quietly excludes the losers."""
+    text = paper.abstract
+    if BACKTEST_TERMS.search(text) and not SURVIVORSHIP_TERMS.search(text):
+        return Signal(
+            "survivorship_bias",
+            WARN,
+            "Backtest with no mention of delisted/failed firms; sample may "
+            "suffer from survivorship bias.",
+            evidence=BACKTEST_TERMS.search(text).group(0),
+            confidence=0.5,
+        )
+    return Signal("survivorship_bias", OK, "No survivorship-bias red flag.")
+
+
+@signal("transaction_cost_omission")
+def transaction_cost_omission_signal(paper: Paper, **_) -> Signal:
+    """A trading strategy with no mention of costs/slippage may look
+    profitable purely because costs were never modeled."""
+    text = paper.abstract
+    match = TRADING_STRATEGY_TERMS.search(text)
+    if match and not COST_TERMS.search(text):
+        return Signal(
+            "transaction_cost_omission",
+            WARN,
+            "Trading strategy with no mention of transaction costs or "
+            "slippage; reported profitability may not survive real costs.",
+            evidence=match.group(0),
+            confidence=0.55,
+        )
+    return Signal("transaction_cost_omission", OK, "No transaction-cost red flag.")
+
+
+@signal("single_market_period")
+def single_market_period_signal(paper: Paper, **_) -> Signal:
+    """A backtest or strategy tested on one market/period with no mention of
+    robustness across regimes risks being an artifact of that window."""
+    text = paper.abstract
+    match = BACKTEST_TERMS.search(text) or TRADING_STRATEGY_TERMS.search(text)
+    if match and not CROSS_REGIME_TERMS.search(text):
+        return Signal(
+            "single_market_period",
+            WARN,
+            "No mention of testing across multiple markets, periods, or "
+            "regimes; result may be specific to a single window.",
+            evidence=match.group(0),
+            confidence=0.45,
+        )
+    return Signal("single_market_period", OK, "No single-market/period red flag.")
 
 
 @signal("baseline_fairness")
