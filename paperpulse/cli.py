@@ -213,7 +213,8 @@ def _cmd_factors_list(args: argparse.Namespace) -> int:
     for e in entries:
         aliases = f" [{', '.join(e.aliases)}]" if e.aliases else ""
         region = f" region={e.region}" if e.region else ""
-        print(f"- {e.name}{aliases}: {e.source}/{e.result}{region} {e.notes}")
+        logged = f" (logged {e.created_at[:10]})" if e.created_at else ""
+        print(f"- {e.name}{aliases}: {e.source}/{e.result}{region}{logged} {e.notes}")
     return 0
 
 
