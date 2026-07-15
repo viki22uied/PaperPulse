@@ -179,6 +179,17 @@ function renderFilter(){
 }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function bar(score){ const w=12, fl=Math.max(0,Math.min(w,Math.round(score*w))); return "\\u2588".repeat(fl)+"\\u2591".repeat(w-fl); }
+let lastPapers = [];
+let resultFilter = "all";
+// F1: one-click presets surfacing the Section A/B logic (known factor
+// families, untested regions) visually instead of requiring CLI flags.
+const RESULT_FILTERS = {
+  all: { label: "All", test: () => true },
+  usa: { label: "Region: USA only", test: p => (p.regions||[]).includes("USA") },
+  known: { label: "Known factor families only",
+    test: p => ((p.trust && p.trust.flags) || []).some(f => f.name === "known_topic") },
+  untested: { label: "Untested regions only", test: p => !!p.region_note },
+};
 async function load(){
   const res = document.getElementById("results");
   if(selected.size===0){ res.innerHTML = '<div class="status">Select at least one topic, then press Run.</div>'; return; }
@@ -187,16 +198,35 @@ async function load(){
     const r = await fetch("/api/digest?cats=" + [...selected].join(","));
     if(!r.ok) throw new Error("HTTP "+r.status);
     const data = await r.json();
-    render(data.papers || []);
+    lastPapers = data.papers || [];
+    render(lastPapers);
   }catch(e){
     res.innerHTML = '<div class="status">Couldn\\'t fetch papers — arXiv may be rate-limiting. Try again in a moment.<br><small>'+esc(e.message)+'</small></div>';
   }
 }
+function resultFilterBar(){
+  const bar = document.createElement("div"); bar.className = "actions";
+  for(const [key, {label}] of Object.entries(RESULT_FILTERS)){
+    const btn = document.createElement("button");
+    btn.className = "btn" + (resultFilter === key ? " primary" : "");
+    btn.textContent = label;
+    btn.onclick = () => { resultFilter = key; render(lastPapers); };
+    bar.appendChild(btn);
+  }
+  return bar;
+}
 function render(papers){
   const res = document.getElementById("results");
-  if(papers.length===0){ res.innerHTML = '<div class="status">No papers matched. Try more topics.</div>'; return; }
+  const shown = papers.filter(RESULT_FILTERS[resultFilter].test);
   res.innerHTML = "";
-  papers.forEach((p,i) => {
+  res.appendChild(resultFilterBar());
+  if(shown.length===0){
+    const empty = document.createElement("div"); empty.className="status";
+    empty.textContent = papers.length===0 ? "No papers matched. Try more topics." : "No papers match this filter.";
+    res.appendChild(empty);
+    return;
+  }
+  shown.forEach((p,i) => {
     const t = p.trust || {};
     const badge = t.badge || "clean";
     const flags = (t.flags||[]).map(s => {
@@ -212,6 +242,8 @@ function render(papers){
         ' <span class="'+(q.change_pct>=0?"up":"down")+'">'+(q.change_pct>=0?"+":"")+q.change_pct+'%</span>';
       return '<span class="tk">'+esc(q.ticker)+' '+q.price+' '+esc(q.currency)+chg+'</span>';
     }).join("");
+    const region = (p.regions||[]).length ? '<div class="meta">Region: '+esc(p.regions.join(", "))+'</div>' : "";
+    const regionNote = p.region_note ? '<div class="meta">✅ '+esc(p.region_note)+'</div>' : "";
     const card = document.createElement("div"); card.className="card";
     card.innerHTML =
       '<h3>'+(i+1)+'. '+esc(p.title)+'</h3>'+
@@ -219,6 +251,7 @@ function render(papers){
         ' <span class="badge '+badge+'">'+badge+'</span> '+prio+'</div>'+
       (quotes ? '<div class="market">'+quotes+'</div>' : '')+
       (p.summary ? '<p>'+esc(p.summary)+'</p>' : '')+
+      region + regionNote +
       (flags ? '<ul class="flags">'+flags+'</ul>' : '')+
       '<div class="meta"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">abstract</a> · <code>'+esc(p.id)+'</code></div>';
     res.appendChild(card);

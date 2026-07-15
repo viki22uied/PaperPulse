@@ -36,6 +36,18 @@ def test_add_and_all_round_trip():
         assert "board composition" in entries[0].aliases
 
 
+def test_mark_seen_updates_last_seen_at():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = TopicLog(Path(tmp) / "t.db")
+        try:
+            db.add("momentum", result="weak")
+            assert db.all()[0].last_seen_at == ""
+            db.mark_seen("momentum")
+            assert db.all()[0].last_seen_at != ""
+        finally:
+            db.close()
+
+
 def test_match_text_hits_alias():
     entries = [
         TopicEntry(name="low_volatility", aliases=["betting against beta"], result="weak")
