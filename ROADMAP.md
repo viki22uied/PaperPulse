@@ -55,8 +55,10 @@ exercised by you once keys/egress are in place — they fail soft until then.
   --dislike` auto-logs the disliked paper's title into this same log
   (`crowded`/`weak-result` -> `weak`, `already-tried` -> `dead`;
   `irrelevant` logs nothing, since it says nothing about the topic itself)
-- ⏳ Inverse interest profile (`avoid_topics` subtracted from the ranking
-  score, not just post-hoc dislikes)
+- ✅ Inverse interest profile: `avoid_topics` + `avoid_weight` in config are
+  embedded and subtracted straight from the ranking score, so a topic you've
+  already exhausted ranks lower from the very first run (cold start, no
+  feedback needed). Seed it with `paperpulse init --seed-avoid factors.txt`.
 - ⏳ Semantic (embedding) cross-reference against the log, beyond the current
   deterministic name/alias match
 

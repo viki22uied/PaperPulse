@@ -60,6 +60,29 @@ def test_feedback_moves_profile_toward_liked():
     assert profile.n_feedback == 1
 
 
+def test_avoid_vector_demotes_matching_paper():
+    from paperpulse.rank import score_papers
+
+    backend = _backend()
+    profile = InterestProfile.from_text("equity factor research", backend)
+    papers = [
+        _paper(
+            "board",
+            "Board diversity and firm performance",
+            "We study board gender diversity and its relation to firm "
+            "performance and stock returns.",
+        ),
+    ]
+    avoid_matrix = backend.encode(["board diversity, gender diversity board composition"])
+    avoid_vector = avoid_matrix[0]
+
+    scores_off, _ = score_papers(papers, profile, backend)
+    scores_on, _ = score_papers(
+        papers, profile, backend, avoid_vector=avoid_vector, avoid_weight=1.0
+    )
+    assert scores_on[0] < scores_off[0]
+
+
 def test_diversity_avoids_near_duplicates():
     backend = _backend()
     profile = InterestProfile.from_text("text embeddings", backend)

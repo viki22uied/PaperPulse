@@ -21,6 +21,11 @@ class Config:
         "interest in retrieval, embeddings, and practical model evaluation."
     )
     seed_papers: list[str] = field(default_factory=list)
+    # Topics to actively rank *down* (e.g. factors you've already worked
+    # extensively on), independent of the learned Rocchio profile -- applies
+    # even on a cold-start profile with zero feedback yet.
+    avoid_topics: list[str] = field(default_factory=list)
+    avoid_weight: float = 0.5
 
     # Ingestion
     max_results: int = 200
