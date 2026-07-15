@@ -48,7 +48,7 @@ class State:
         path = Path(path)
         if not path.exists():
             return cls()
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
 
         profiles: dict[str, InterestProfile] = {}
         # New format: {"profiles": {...}}. Old format: {"profile": {...}}.
@@ -73,5 +73,5 @@ class State:
             "seen_ids": sorted(self.seen_ids),
             "shown": self.shown,
         }
-        path.write_text(json.dumps(data, indent=2))
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return path

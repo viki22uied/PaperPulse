@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperpulse"
-version = "0.1.3"
+version = "0.2.0"
 description = "Relevance-ranked arXiv digests: the few papers that actually matter to you, summarised."
 readme = "README.md"
 requires-python = ">=3.10"

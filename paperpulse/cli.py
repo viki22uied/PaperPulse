@@ -17,7 +17,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         return 1
     config = Config()
     if args.seed_avoid:
-        text = Path(args.seed_avoid).read_text()
+        text = Path(args.seed_avoid).read_text(encoding="utf-8")
         topics = [t.strip() for t in re.split(r"[,\n]", text) if t.strip()]
         config.avoid_topics = topics
     path = config.save()
@@ -311,6 +311,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Digests carry emoji/unicode badges; a non-UTF-8 console codepage (the
+    # Windows default) would otherwise crash on print() rather than showing them.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
