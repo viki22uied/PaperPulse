@@ -88,6 +88,29 @@ def _cmd_sources(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_note(args: argparse.Namespace) -> int:
+    config = Config.load(args.config)
+    if not config.community_db:
+        print("Set `community_db` in paperpulse.yaml to use notes.")
+        return 1
+    from .community import CommunityDB
+
+    db = CommunityDB(config.community_db)
+    try:
+        if args.text:
+            db.add_note(args.paper_id, args.text, user=args.user)
+            print(f"Noted on {args.paper_id}.")
+        else:
+            notes = db.get_notes(args.paper_id)
+            if not notes:
+                print(f"No notes on {args.paper_id}.")
+            for n in notes:
+                print(f"[{n['created_at']}] {n['user']}: {n['note']}")
+    finally:
+        db.close()
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     from .api import serve
 
@@ -131,6 +154,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_sim.add_argument("path", help="path to a .py / .ipynb file")
     p_sim.add_argument("--top-n", type=int, default=10)
     p_sim.set_defaults(func=_cmd_similar)
+
+    p_note = sub.add_parser("note", help="add or list notes on a paper (needs community_db)")
+    p_note.add_argument("paper_id")
+    p_note.add_argument("text", nargs="?", default=None, help="omit to list existing notes")
+    p_note.add_argument("--user", default="default")
+    p_note.set_defaults(func=_cmd_note)
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)

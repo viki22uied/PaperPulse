@@ -28,6 +28,22 @@ def test_measured_abstract_is_clean():
     assert report.flags == []
 
 
+def test_related_work_flags_thin_reference_list(monkeypatch):
+    from paperpulse.trust import external
+
+    monkeypatch.setattr(
+        external, "_s2_paper_data", lambda arxiv_id: {"references": [{}] * 3}
+    )
+    signal = external.related_work_signal(_paper("abstract"), online=True)
+    assert signal.status == trust.WARN
+
+    monkeypatch.setattr(
+        external, "_s2_paper_data", lambda arxiv_id: {"references": [{}] * 20}
+    )
+    signal = external.related_work_signal(_paper("abstract"), online=True)
+    assert signal.status == trust.OK
+
+
 def test_leakage_flag_on_timeseries():
     paper = _paper(
         "We forecast stock returns using a random split of the time-series data "

@@ -7,6 +7,7 @@ unavailable the signal degrades to OK rather than blocking the digest.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -126,9 +127,10 @@ def _author_key(author: dict) -> str:
     return "name:" + re.sub(r"\W+", " ", (author.get("name") or "").lower()).strip()
 
 
-def _self_citation_ratio(arxiv_id: str, timeout: float = 15.0) -> tuple[float, int]:
-    """Fraction of a paper's references that share an author with it, via
-    Semantic Scholar. Returns (ratio, n_references)."""
+@functools.lru_cache(maxsize=256)
+def _s2_paper_data(arxiv_id: str, timeout: float = 15.0) -> dict:
+    """Raw Semantic Scholar record for a paper (authors + references), shared
+    by every S2-backed signal so a batch only pays for one request per paper."""
     aid = arxiv_id.split("v")[0]  # S2 wants the version-less id
     url = S2_PAPER_API.format(aid) + "?fields=authors,references.authors"
     headers = {"User-Agent": "PaperPulse/0.1"}
@@ -136,7 +138,12 @@ def _self_citation_ratio(arxiv_id: str, timeout: float = 15.0) -> tuple[float, i
         headers["x-api-key"] = os.environ["S2_API_KEY"]
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        data = json.loads(response.read())
+        return json.loads(response.read())
+
+
+def _self_citation_ratio(arxiv_id: str) -> tuple[float, int]:
+    """Fraction of a paper's references that share an author with it."""
+    data = _s2_paper_data(arxiv_id)
     own = {_author_key(a) for a in data.get("authors") or []}
     refs = [r for r in (data.get("references") or []) if r.get("authors")]
     if not own or not refs:
@@ -171,4 +178,30 @@ def self_citation_signal(paper: Paper, *, online: bool = False, **_) -> Signal:
     return Signal(
         "self_citation", OK, f"Self-citation looks normal ({ratio:.0%}).",
         evidence=f"{ratio:.0%} of {n_refs} references",
+    )
+
+
+_THIN_REFERENCE_COUNT = 10
+
+
+@signal("related_work")
+def related_work_signal(paper: Paper, *, online: bool = False, **_) -> Signal:
+    """Flag a reference list too thin to plausibly cover related work -- a
+    cheap proxy for citation-graph gaps without building a full graph diff."""
+    if not online:
+        return Signal("related_work", OK, "Related-work check skipped (offline).")
+    try:
+        n_refs = len(_s2_paper_data(paper.id).get("references") or [])
+    except Exception:
+        return Signal("related_work", OK, "Related-work check unavailable.")
+    if n_refs < _THIN_REFERENCE_COUNT:
+        return Signal(
+            "related_work",
+            WARN,
+            f"Only {n_refs} references -- related work may be thin.",
+            evidence=f"{n_refs} references",
+            confidence=0.6,
+        )
+    return Signal(
+        "related_work", OK, f"Reference list looks reasonably sized ({n_refs}).",
     )

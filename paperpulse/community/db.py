@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS trust_reports (
     created_at TEXT NOT NULL,
     PRIMARY KEY (paper_id, user)
 );
+CREATE TABLE IF NOT EXISTS notes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_id   TEXT NOT NULL,
+    user       TEXT NOT NULL DEFAULT 'anon',
+    note       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -84,3 +91,23 @@ class CommunityDB:
                 entry["flags"] += len(flags)
         board = sorted(counts.values(), key=lambda e: e["flags"], reverse=True)
         return board[:limit]
+
+    # --- annotations ---------------------------------------------------------
+    def add_note(self, paper_id: str, note: str, *, user: str = "anon") -> None:
+        """Save a free-text note against a paper, so the digest can double as
+        a personal reading library, not just a one-shot feed."""
+        self._conn.execute(
+            "INSERT INTO notes (paper_id, user, note, created_at) VALUES (?, ?, ?, ?)",
+            (paper_id, user, note, _now()),
+        )
+        self._conn.commit()
+
+    def get_notes(self, paper_id: str, *, user: str | None = None) -> list[dict]:
+        query = "SELECT * FROM notes WHERE paper_id = ?"
+        params: list = [paper_id]
+        if user is not None:
+            query += " AND user = ?"
+            params.append(user)
+        query += " ORDER BY created_at"
+        rows = self._conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
