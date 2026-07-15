@@ -19,13 +19,14 @@ from pathlib import Path
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS topics (
-    name       TEXT PRIMARY KEY,
-    aliases    TEXT NOT NULL DEFAULT '',   -- comma-separated
-    source     TEXT NOT NULL DEFAULT 'manual',   -- manual | literature
-    result     TEXT NOT NULL DEFAULT 'untested',  -- dead | weak | promising | untested
-    region     TEXT NOT NULL DEFAULT '',
-    notes      TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
+    name          TEXT PRIMARY KEY,
+    aliases       TEXT NOT NULL DEFAULT '',   -- comma-separated
+    source        TEXT NOT NULL DEFAULT 'manual',   -- manual | literature
+    result        TEXT NOT NULL DEFAULT 'untested',  -- dead | weak | promising | untested
+    region        TEXT NOT NULL DEFAULT '',
+    notes         TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    last_seen_at  TEXT NOT NULL DEFAULT ''   -- F2: last time a paper matched this topic
 );
 """
 
@@ -40,6 +41,7 @@ class TopicEntry:
     result: str = "untested"
     region: str = ""
     notes: str = ""
+    last_seen_at: str = ""
 
 
 def _now() -> str:
@@ -57,6 +59,13 @@ class TopicLog:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        # Migration for DBs created before F2 added last_seen_at.
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(topics)")}
+        if "last_seen_at" not in cols:
+            self._conn.execute(
+                "ALTER TABLE topics ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''"
+            )
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -91,9 +100,19 @@ class TopicLog:
                 result=r["result"],
                 region=r["region"],
                 notes=r["notes"],
+                last_seen_at=r["last_seen_at"],
             )
             for r in rows
         ]
+
+    def mark_seen(self, name: str) -> None:
+        """F2: record that a paper matching ``name`` was just seen, so
+        `paperpulse factors check` can tell "new evidence" from "seen this
+        before" on a tracked dead/weak factor."""
+        self._conn.execute(
+            "UPDATE topics SET last_seen_at = ? WHERE name = ?", (_now(), name)
+        )
+        self._conn.commit()
 
 
 def match_text(text: str, entries: list[TopicEntry], *, threshold: float = 0.9) -> TopicEntry | None:

@@ -7,9 +7,9 @@ categories:
   - cs.LG
   - cs.CL
 
-# Quant equity research preset (WorldQuant BRAIN-style factor research):
-# uncomment to pull from the categories that actually carry factor/portfolio
-# methodology papers, rather than just cs.LG/cs.CL.
+# Quant equity research preset: uncomment to pull from the categories that
+# actually carry factor/portfolio methodology papers, rather than just
+# cs.LG/cs.CL.
 # categories:
 #   - q-fin.PM   # portfolio management
 #   - q-fin.ST   # statistical finance

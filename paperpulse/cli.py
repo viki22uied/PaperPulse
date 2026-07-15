@@ -153,6 +153,50 @@ def _cmd_factors_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_factors_check(args: argparse.Namespace) -> int:
+    """F2: run today's digest and report new evidence on tracked dead/weak
+    factors -- "new" meaning not seen (matched) in the last 7 days."""
+    from datetime import datetime, timedelta, timezone
+
+    from .topics import TopicLog
+
+    config = Config.load(args.config)
+    if not config.topics_db:
+        print("Set `topics_db` in paperpulse.yaml to use `factors check`.")
+        return 1
+
+    result = run_digest(config, dry_run=True)
+    log = TopicLog(config.topics_db)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    hits = 0
+    try:
+        for item in result.ranked:
+            if item.trust is None:
+                continue
+            matched = next(
+                (s for s in item.trust.signals if s.name == "known_topic" and s.evidence),
+                None,
+            )
+            if matched is None:
+                continue
+            entries = {e.name: e for e in log.all()}
+            entry = entries.get(matched.evidence)
+            if entry is None or entry.result not in ("dead", "weak"):
+                continue
+            is_new = not entry.last_seen_at or (
+                datetime.fromisoformat(entry.last_seen_at) < cutoff
+            )
+            if is_new:
+                hits += 1
+                print(f"New evidence on '{entry.name}' ({entry.result}): {item.paper.title}")
+            log.mark_seen(entry.name)
+    finally:
+        log.close()
+    if not hits:
+        print("No new evidence on tracked dead/weak factors in today's batch.")
+    return 0
+
+
 def _cmd_factors_list(args: argparse.Namespace) -> int:
     from .topics import TopicLog
 
@@ -249,6 +293,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_factors_list = factors_sub.add_parser("list", help="list logged factors/topics")
     p_factors_list.set_defaults(func=_cmd_factors_list)
+
+    p_factors_check = factors_sub.add_parser(
+        "check", help="run today's digest and report new evidence on tracked dead/weak factors (F2)"
+    )
+    p_factors_check.set_defaults(func=_cmd_factors_check)
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)
