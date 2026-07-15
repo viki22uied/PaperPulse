@@ -69,6 +69,24 @@ def test_community_db_records_and_leaderboards(tmp_path):
     db.close()
 
 
+def test_community_db_notes(tmp_path):
+    db = CommunityDB(tmp_path / "c.db")
+    assert db.get_notes("p1") == []
+    db.add_note("p1", "worth re-reading", user="alice")
+    db.add_note("p1", "unrelated", user="bob")
+    notes = db.get_notes("p1")
+    assert [n["note"] for n in notes] == ["worth re-reading", "unrelated"]
+    assert db.get_notes("p1", user="alice")[0]["note"] == "worth re-reading"
+    db.close()
+
+
+def test_fetch_full_text_returns_none_without_pdf_url():
+    from paperpulse.fulltext import fetch_full_text
+    from paperpulse.models import Paper
+
+    assert fetch_full_text(Paper(id="1", title="t", abstract="a")) is None
+
+
 def test_render_rss_is_wellformed():
     from xml.etree import ElementTree as ET
 

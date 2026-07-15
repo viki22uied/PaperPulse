@@ -9,6 +9,8 @@ capabilities as the CLI:
     GET  /api/digest             -> ranked papers + trust as JSON
     POST /api/feedback           -> {"like": [...], "dislike": [...]}
     GET  /api/community/leaderboard
+    GET  /api/notes?paper_id=... -> notes on a paper (needs community_db)
+    POST /api/notes              -> {"paper_id", "note", "user"}
 """
 
 from __future__ import annotations
@@ -309,6 +311,21 @@ def make_handler(config: Config):
                     self._json({"leaderboard": db.flag_leaderboard()})
                 finally:
                     db.close()
+            elif path == "/api/notes":
+                if not config.community_db:
+                    self._json({"error": "community_db not configured"}, 400)
+                    return
+                paper_id = parse_qs(urlparse(self.path).query).get("paper_id", [""])[0]
+                if not paper_id:
+                    self._json({"error": "paper_id required"}, 400)
+                    return
+                from .community import CommunityDB
+
+                db = CommunityDB(config.community_db)
+                try:
+                    self._json({"notes": db.get_notes(paper_id)})
+                finally:
+                    db.close()
             else:
                 self._json({"error": "not found"}, 404)
 
@@ -329,6 +346,23 @@ def make_handler(config: Config):
                     user=body.get("user", "default"),
                 )
                 self._json({"ok": True, "n_feedback": profile.n_feedback})
+            elif path == "/api/notes":
+                if not config.community_db:
+                    self._json({"error": "community_db not configured"}, 400)
+                    return
+                paper_id = body.get("paper_id", "")
+                note = body.get("note", "")
+                if not paper_id or not note:
+                    self._json({"error": "paper_id and note required"}, 400)
+                    return
+                from .community import CommunityDB
+
+                db = CommunityDB(config.community_db)
+                try:
+                    db.add_note(paper_id, note, user=body.get("user", "default"))
+                    self._json({"ok": True})
+                finally:
+                    db.close()
             else:
                 self._json({"error": "not found"}, 404)
 
