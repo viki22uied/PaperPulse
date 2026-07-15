@@ -170,6 +170,7 @@ def _cmd_factors_check(args: argparse.Namespace) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     hits = 0
     try:
+        entries = {e.name: e for e in log.all()}
         for item in result.ranked:
             if item.trust is None:
                 continue
@@ -179,7 +180,6 @@ def _cmd_factors_check(args: argparse.Namespace) -> int:
             )
             if matched is None:
                 continue
-            entries = {e.name: e for e in log.all()}
             entry = entries.get(matched.evidence)
             if entry is None or entry.result not in ("dead", "weak"):
                 continue
