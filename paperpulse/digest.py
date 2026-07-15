@@ -75,6 +75,10 @@ def render_markdown(
         ]
         if item.summary:
             lines += [item.summary, ""]
+        if item.regions:
+            lines += [f"*Region: {', '.join(item.regions)}*", ""]
+        if item.region_note:
+            lines += [f"✅ {item.region_note}", ""]
         lines += _trust_block(item)
         links = [f"[abstract]({paper.url})"]
         if paper.pdf_url:

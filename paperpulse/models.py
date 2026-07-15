@@ -48,3 +48,8 @@ class RankedPaper:
     trust: Optional[object] = None
     # Mean similarity to nearest neighbours in the same batch (novelty proxy).
     crowding: Optional[float] = None
+    # Detected market/region tags (B1), e.g. ["USA"] or ["Global/Unspecified"].
+    regions: list[str] = field(default_factory=list)
+    # Set when this paper's region isn't in already_tested_regions for a
+    # matched known/tried topic (B2) -- a green "worth exploring" note.
+    region_note: str = ""

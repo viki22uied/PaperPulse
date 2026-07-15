@@ -89,6 +89,46 @@ def _attach_trust(config: Config, ranked: list[RankedPaper]) -> None:
         item.trust = trust_mod.assess(item.paper, enabled=signals, context=ctx)
 
 
+def _attach_regions(config: Config, ranked: list[RankedPaper]) -> None:
+    """Tag each paper with detected market/region(s) (B1), and note when a
+    paper's region isn't one already logged as tested for a matched
+    known/tried topic (B2)."""
+    from .region import UNSPECIFIED, detect_regions
+
+    for item in ranked:
+        item.regions = detect_regions(f"{item.paper.title} {item.paper.abstract}")
+        if not config.already_tested_regions or item.trust is None:
+            continue
+        matched_name = next(
+            (s.evidence for s in item.trust.signals if s.name == "known_topic" and s.evidence),
+            None,
+        )
+        if not matched_name:
+            continue
+        tested = set(config.already_tested_regions.get(matched_name, []))
+        detected = set(item.regions) - {UNSPECIFIED}
+        if detected and not detected & tested:
+            item.region_note = (
+                f"Untested region ({', '.join(sorted(detected))}) for "
+                f"'{matched_name}' -- may still be valid to explore."
+            )
+
+
+def _filter_regions(config: Config, ranked: list[RankedPaper]) -> list[RankedPaper]:
+    if not config.region_filter:
+        return ranked
+    wanted = set(config.region_filter)
+    from .region import UNSPECIFIED
+
+    def keep(item: RankedPaper) -> bool:
+        regions = set(item.regions)
+        if regions & wanted:
+            return True
+        return config.region_filter_include_unspecified and UNSPECIFIED in regions
+
+    return [item for item in ranked if keep(item)]
+
+
 def _record_community(config: Config, ranked: list[RankedPaper]) -> None:
     if not config.community_db:
         return
@@ -147,6 +187,8 @@ def run_digest(
     )
 
     _attach_trust(config, ranked)
+    _attach_regions(config, ranked)
+    ranked = _filter_regions(config, ranked)
 
     for item in ranked:
         item.summary = summarise(

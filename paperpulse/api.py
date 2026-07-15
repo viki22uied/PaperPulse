@@ -249,6 +249,8 @@ def _digest_json(config: Config) -> dict:
                 "priority": round(max(0.0, item.score)
                                   * (item.trust.score if item.trust else 1.0), 4),
                 "summary": item.summary,
+                "regions": item.regions,
+                "region_note": item.region_note or None,
                 "url": item.paper.url,
                 "quotes": market.enrich(f"{item.paper.title} {item.paper.abstract}"),
                 "trust": None

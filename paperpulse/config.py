@@ -41,6 +41,14 @@ class Config:
     trust_signals: list[str] | None = None  # None => library defaults
     trust_online: bool = False  # enable network checks (links, retractions)
 
+    # Region tagging (B1/B2)
+    region_filter: list[str] = field(default_factory=list)  # [] => no filter
+    region_filter_include_unspecified: bool = True
+    # factor/topic name (matches the topics log) -> regions already tested,
+    # e.g. {"board diversity": ["USA"]}. A paper on that factor in a region
+    # NOT listed here gets a green "untested region" note.
+    already_tested_regions: dict[str, list[str]] = field(default_factory=dict)
+
     # Contradiction mapping
     contradictions: bool = True
 
