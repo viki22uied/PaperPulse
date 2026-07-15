@@ -60,6 +60,8 @@ class SignalContext:
     crowding: float | None = None
     full_text: str | None = None
     online: bool = False
+    # Loaded once per digest run (not per paper) from the configured topics DB.
+    topics: list | None = None
 
 
 SignalFn = Callable[..., Signal]
@@ -83,6 +85,7 @@ from . import heuristics  # noqa: E402,F401
 from . import quant  # noqa: E402,F401
 from . import publication  # noqa: E402,F401
 from . import external  # noqa: E402,F401
+from . import known_topics  # noqa: E402,F401
 
 
 DEFAULT_SIGNALS = [
@@ -98,6 +101,7 @@ DEFAULT_SIGNALS = [
     "baseline_fairness",
     "backtest_overfit",
     "peer_review",
+    "known_topic",
 ]
 
 
@@ -110,7 +114,12 @@ def assess(
     """Run the enabled signals over a paper and aggregate into a report."""
     names = enabled if enabled is not None else DEFAULT_SIGNALS
     ctx = context or SignalContext()
-    kwargs = {"crowding": ctx.crowding, "full_text": ctx.full_text, "online": ctx.online}
+    kwargs = {
+        "crowding": ctx.crowding,
+        "full_text": ctx.full_text,
+        "online": ctx.online,
+        "topics": ctx.topics,
+    }
 
     signals: list[Signal] = []
     for name in names:
