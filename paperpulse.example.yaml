@@ -43,6 +43,18 @@ summary_sentences: 3
 output_dir: digests
 state_path: .paperpulse_state.json
 
+# Optional: restrict digests to papers tagged with these regions (USA / EUR /
+# CHN / IND), based on keyword-detected market/index names. [] = no filter.
+region_filter: []
+region_filter_include_unspecified: true   # also keep papers with no detected region
+
+# Optional: per-topic map of regions you've already tested yourself, keyed by
+# the same topic name used in the known-topics log (see `topics_db` below).
+# A paper on a logged topic in a region NOT listed here gets a green
+# "untested region -- may still be worth exploring" note.
+already_tested_regions: {}
+#   board diversity: [USA]
+
 # Optional: path to a shared SQLite log of known factor families (from the
 # literature) and topics you've already tried yourself. When set, a fully
 # offline `known_topic` trust signal flags papers that match an entry --

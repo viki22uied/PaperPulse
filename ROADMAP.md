@@ -69,6 +69,17 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ⏳ Semantic (embedding) cross-reference against the log, beyond the current
   deterministic name/alias match
 
+## Region / market relevance
+- ✅ Keyword-based region auto-tagging (`paperpulse/region.py`): USA / EUR /
+  CHN / IND from index/market names, else `Global/Unspecified`. Shown per
+  paper in the digest and REST API (`regions` field).
+- ✅ `region_filter` config to restrict digests to specific regions (with
+  `Global/Unspecified` kept by default via `region_filter_include_unspecified`)
+- ✅ Cross-region transfer flag: `already_tested_regions` maps a known-topics
+  entry to the regions you've already tested it in; a matched topic in an
+  untested region gets a green "may still be valid to explore" note instead
+  of being suppressed like a same-region repeat would be
+
 ## Quant-derived trust signals
 - ✅ Novelty-vs-crowding score (batch embedding similarity)
 - ✅ Subgroup-robustness check
