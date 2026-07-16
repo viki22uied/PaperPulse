@@ -16,6 +16,12 @@ from .profile import InterestProfile
 DEFAULT_USER = "default"
 
 
+# How many digest snapshots to retain per category-set. The diff only ever
+# reads the most recent one; the rest are kept as cheap history and capped so
+# the state file can't grow without bound.
+MAX_SNAPSHOTS_PER_KEY = 20
+
+
 @dataclass
 class State:
     profiles: dict[str, InterestProfile] = field(default_factory=dict)
@@ -23,6 +29,18 @@ class State:
     # id -> {"title", "abstract"} for papers we've shown, so feedback by id can
     # be re-embedded later without another network round-trip.
     shown: dict[str, dict] = field(default_factory=dict)
+    # "what changed since last week": category-set key -> list of past digest
+    # snapshots, oldest first. See pipeline._make_snapshot for the shape.
+    snapshots: dict[str, list[dict]] = field(default_factory=dict)
+
+    def add_snapshot(self, key: str, snapshot: dict) -> None:
+        history = self.snapshots.setdefault(key, [])
+        history.append(snapshot)
+        del history[:-MAX_SNAPSHOTS_PER_KEY]
+
+    def latest_snapshot(self, key: str) -> dict | None:
+        history = self.snapshots.get(key) or []
+        return history[-1] if history else None
 
     # --- convenience for the common single-user case ------------------------
     def get_profile(self, user: str = DEFAULT_USER) -> InterestProfile | None:
@@ -64,6 +82,7 @@ class State:
             profiles=profiles,
             seen_ids=set(data.get("seen_ids", [])),
             shown=data.get("shown", {}),
+            snapshots=data.get("snapshots", {}),
         )
 
     def save(self, path: str | Path) -> Path:
@@ -72,6 +91,7 @@ class State:
             "profiles": {u: p.to_dict() for u, p in self.profiles.items()},
             "seen_ids": sorted(self.seen_ids),
             "shown": self.shown,
+            "snapshots": self.snapshots,
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return path

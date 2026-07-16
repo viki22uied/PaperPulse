@@ -109,6 +109,7 @@ def rank_papers(
             paper=papers[i],
             score=float(scores_arr[i]),
             crowding=float(crowding[i]),
+            vector=matrix[i],
         )
         for i in order
         if scores_arr[i] >= min_score

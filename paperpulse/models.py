@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:  # trust imports models, so this can't be a runtime import
     from .trust import TrustReport
@@ -51,6 +51,11 @@ class RankedPaper:
     trust: Optional["TrustReport"] = None
     # Mean similarity to nearest neighbours in the same batch (novelty proxy).
     crowding: Optional[float] = None
+    # The embedding computed during ranking. Kept so downstream consumers
+    # (literature crowding, semantic known-topic match) can reuse it instead of
+    # re-encoding the same text once per paper. np.ndarray; Any avoids making
+    # models.py import numpy purely for an annotation.
+    vector: Optional[Any] = None
     # Detected market/region tags (B1), e.g. ["USA"] or ["Global/Unspecified"].
     regions: list[str] = field(default_factory=list)
     # Set when this paper's region isn't in already_tested_regions for a

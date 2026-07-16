@@ -7,6 +7,7 @@ capabilities as the CLI:
     GET  /                       -> HTML dashboard (renders the digest)
     GET  /api/sources            -> available paper sources
     GET  /api/digest             -> ranked papers + trust as JSON
+    GET  /api/diff               -> what changed vs the last recorded run
     POST /api/feedback           -> {"like": [...], "dislike": [...]}
     GET  /api/community/leaderboard
     GET  /api/notes?paper_id=... -> notes on a paper (needs community_db)
@@ -21,12 +22,12 @@ import time
 from collections import defaultdict
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, cast
+from typing import Any, Callable, cast
 from urllib.parse import parse_qs, urlparse
 
 from . import market
 from .config import Config
-from .pipeline import DigestResult, apply_feedback, run_digest
+from .pipeline import DiffResult, DigestResult, apply_feedback, diff_digest, run_digest
 from .sources import available
 
 # Topic filter catalog: group -> [(arXiv category, friendly label), ...]. The
@@ -65,19 +66,30 @@ _key_locks: defaultdict[tuple[str, ...], threading.Lock] = defaultdict(threading
 _key_locks_guard = threading.Lock()  # only guards handing out the per-key locks
 
 
-def _cached_digest(config: Config) -> DigestResult:
-    # One lock per cats-key: different filters fetch concurrently, but concurrent
-    # requests for the *same* filter still collapse into a single arXiv fetch.
-    key = tuple(sorted(config.categories))
+def _cached(key: tuple[str, ...], build: Callable[[], Any]) -> Any:
+    # One lock per key: different filters fetch concurrently, but concurrent
+    # requests for the *same* key still collapse into a single arXiv fetch.
     with _key_locks_guard:
         lock = _key_locks[key]
     with lock:
         entry = _digest_cache.get(key)
         if entry and time.time() - entry["ts"] < _DIGEST_CACHE_TTL:
-            return cast(DigestResult, entry["result"])
-        result = run_digest(config, dry_run=True)
+            return entry["result"]
+        result = build()
         _digest_cache[key] = {"result": result, "ts": time.time()}
         return result
+
+
+def _cached_digest(config: Config) -> DigestResult:
+    key = ("digest", *sorted(config.categories))
+    return cast(DigestResult, _cached(key, lambda: run_digest(config, dry_run=True)))
+
+
+def _cached_diff(config: Config) -> DiffResult:
+    # mark=False: a GET must be safe to repeat, so the endpoint never writes
+    # last_seen_at back to the topics log. `paperpulse diff --mark` does that.
+    key = ("diff", *sorted(config.categories))
+    return cast(DiffResult, _cached(key, lambda: diff_digest(config, mark=False)))
 
 
 def _parse_cats(query: str) -> list[str] | None:
@@ -180,6 +192,10 @@ function renderFilter(){
   act.appendChild(clear);
   const run = document.createElement("button"); run.className="btn primary"; run.textContent="Run";
   run.onclick = load; act.appendChild(run);
+  const sinceBtn = document.createElement("button");
+  sinceBtn.className = "btn"; sinceBtn.textContent = "Since last week";
+  sinceBtn.title = "Diff this category set against the last recorded run";
+  sinceBtn.onclick = loadDiff; act.appendChild(sinceBtn);
   f.appendChild(act);
 }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -208,6 +224,40 @@ async function load(){
   }catch(e){
     res.innerHTML = '<div class="status">Couldn\\'t fetch papers — arXiv may be rate-limiting. Try again in a moment.<br><small>'+esc(e.message)+'</small></div>';
   }
+}
+async function loadDiff(){
+  const res = document.getElementById("results");
+  if(selected.size===0){ res.innerHTML = '<div class="status">Select at least one topic first.</div>'; return; }
+  res.innerHTML = '<div class="status"><span class="spin"></span>Comparing against your last recorded run…</div>';
+  try{
+    const r = await fetch("/api/diff?cats=" + [...selected].join(","));
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    renderDiff(await r.json());
+  }catch(e){
+    res.innerHTML = '<div class="status">Couldn\\'t load the diff.<br><small>'+esc(e.message)+'</small></div>';
+  }
+}
+function renderDiff(d){
+  const res = document.getElementById("results");
+  if(d.is_first_run){
+    res.innerHTML = '<div class="status">No previous snapshot for these topics yet.<br>'+
+      '<small>Run <code>paperpulse run</code> once to record a baseline.</small></div>';
+    return;
+  }
+  const sec = (title, items, fmt) =>
+    '<div class="card"><h3>'+esc(title)+' ('+items.length+')</h3>'+
+    (items.length ? '<ul class="flags" style="padding-left:1.1rem">'+items.map(fmt).join("")+'</ul>'
+                  : '<div class="meta">Nothing new.</div>')+'</div>';
+  res.innerHTML =
+    '<div class="sub">Changes since '+esc((d.since||"").slice(0,19))+'</div>'+
+    sec("New papers", d.new_papers, p =>
+      '<li style="color:inherit"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.title)+'</a>'+
+      (p.badge ? ' <span class="badge '+esc(p.badge)+'">'+esc(p.badge)+'</span>' : '')+'</li>')+
+    sec("Fresh evidence on tracked dead/weak factors", d.factor_evidence, f =>
+      '<li><b>'+esc(f.name)+'</b> ('+esc(f.result)+'): <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+
+      esc(f.title)+'</a></li>')+
+    sec("Contradictions that flipped", d.polarity_flips, x =>
+      '<li>'+esc(x.note)+'</li>');
 }
 function resultFilterBar(){
   const bar = document.createElement("div"); bar.className = "actions";
@@ -314,6 +364,38 @@ def _digest_json(config: Config) -> dict:
     }
 
 
+def _diff_json(config: Config) -> dict:
+    diff = _cached_diff(config)
+    return {
+        "since": diff.since,
+        "is_first_run": diff.is_first_run,
+        "new_papers": [
+            {
+                "id": item.paper.id,
+                "title": item.paper.title,
+                "url": item.paper.url,
+                "score": round(item.score, 4),
+                "badge": item.trust.badge if item.trust else None,
+            }
+            for item in diff.new_papers
+        ],
+        "factor_evidence": [
+            {
+                "name": entry.name,
+                "result": entry.result,
+                "paper_id": item.paper.id,
+                "title": item.paper.title,
+                "url": item.paper.url,
+            }
+            for entry, item in diff.factor_evidence
+        ],
+        "polarity_flips": [
+            {"a": a.id, "b": b.id, "a_title": a.title, "b_title": b.title, "note": note}
+            for a, b, note in diff.polarity_flips
+        ],
+    }
+
+
 def make_handler(config: Config):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):  # keep the console quiet
@@ -340,6 +422,10 @@ def make_handler(config: Config):
                 cats = _parse_cats(urlparse(self.path).query)
                 cfg = replace(config, categories=cats) if cats else config
                 self._json(_digest_json(cfg))
+            elif path == "/api/diff":
+                cats = _parse_cats(urlparse(self.path).query)
+                cfg = replace(config, categories=cats) if cats else config
+                self._json(_diff_json(cfg))
             elif path == "/api/community/leaderboard":
                 if not config.community_db:
                     self._json({"error": "community_db not configured"}, 400)

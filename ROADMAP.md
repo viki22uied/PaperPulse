@@ -72,8 +72,24 @@ exercised by you once keys/egress are in place — they fail soft until then.
   embedded and subtracted straight from the ranking score, so a topic you've
   already exhausted ranks lower from the very first run (cold start, no
   feedback needed). Seed it with `paperpulse init --seed-avoid factors.txt`.
-- ⏳ Semantic (embedding) cross-reference against the log, beyond the current
-  deterministic name/alias match
+- ✅ Semantic (embedding) cross-reference against the log, beyond the current
+  deterministic name/alias match -- opt-in via `known_topics_semantic: true`.
+  The exact name/alias match always wins; this only runs as a fallback when it
+  finds nothing, so a paraphrase ("female representation among corporate
+  directors" vs a logged "board diversity") still matches. The log is embedded
+  once per run and compared against the vector already computed for ranking.
+  The flag stays explainable: `note` says "exact match" vs "semantic match,
+  cosine 0.58", and a semantic hit carries 0.7x the confidence of an exact one.
+  Validated against a 12-abstract labeled sample
+  (`tests/test_known_topics_semantic.py`): with sentence-transformers,
+  **0% false positives (0/7), 100% true positives (5/5)** at the default 0.35
+  threshold -- chosen as the max-margin split between the highest negative
+  (0.29, "board size and director independence": same governance vocabulary,
+  different topic) and the lowest positive (0.40).
+  🔴 **Inert on the default hashing backend** (measured tp=0/5): a bag of word
+  n-grams shares no tokens with a paraphrase, so paraphrases score 0.00-0.06
+  and nothing clears the threshold. It fails safe -- silent, never misfiring --
+  but needs the `semantic` extra to do anything. Off by default for that reason.
 
 ## Region / market relevance
 - ✅ Keyword-based region auto-tagging (`paperpulse/region.py`): USA / EUR /
@@ -107,7 +123,20 @@ exercised by you once keys/egress are in place — they fail soft until then.
 
 ## Contradiction & context mapping
 - ✅ Multi-paper contradiction map for a batch (similarity + opposing polarity)
-- ⏳ "What changed since last week" diff for a tracked subfield
+- ✅ "What changed since last week" diff for a tracked subfield: `paperpulse
+  diff` / `GET /api/diff` / a "Since last week" toggle in the dashboard. Each
+  non-dry `run` records a snapshot (ranked ids, scores, trust badges, flags,
+  contradiction polarities) into the existing state file, keyed by sorted
+  category set so a q-fin digest never diffs against a cs.LG one (capped at 20
+  per key). The diff reports (a) papers absent from the last snapshot, (b) fresh
+  evidence on a tracked dead/weak factor -- the same `last_seen_at` logic as
+  `factors check`, lifted out of the CLI into `pipeline.new_factor_evidence` so
+  both share it, and (c) contradiction pairs whose disagreement reversed
+  direction. Runs with `skip_seen=False` deliberately: the normal digest hides
+  already-shown papers, which would make every survivor look new. Read-only by
+  default (`--mark` opts into writing `last_seen_at`; `GET /api/diff` never
+  does, so it stays safe to repeat). Covered offline by `tests/test_diff.py`
+  (5 tests, synthetic batches, no network).
 - ⏳ Citation-trail contradiction (needs reference resolution / full text)
 
 ## Cross-referencing your own work

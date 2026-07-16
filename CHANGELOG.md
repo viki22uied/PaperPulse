@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **"What changed since last week" diff** — `paperpulse diff`, `GET /api/diff`,
+  and a "Since last week" toggle in the dashboard. Each real run snapshots the
+  digest into the existing state file, keyed by category set; the diff reports
+  new papers, fresh evidence on tracked dead/weak factors, and contradiction
+  pairs whose polarity reversed. Read-only unless `--mark` is passed.
+- **Opt-in semantic match for the known-topics log** (`known_topics_semantic`),
+  so a paraphrase of a logged factor still matches. Exact name/alias matching
+  still takes precedence, and the flag records which path matched. Requires the
+  `semantic` extra — it is inert with the default hashing backend.
+
 ### Fixed
+- `trust.assess` listed context fields by hand when building signal kwargs, so
+  any field added to `SignalContext` was silently dropped and signals saw the
+  parameter default instead. It now passes the whole context through.
+- `_attach_trust` re-encoded every paper individually. The vector computed
+  during ranking is now carried on `RankedPaper` and reused.
 - arXiv client `User-Agent` now reports the real package version instead of a
   hardcoded `0.1`.
 - The digest cache uses one lock per category key, so requests for different

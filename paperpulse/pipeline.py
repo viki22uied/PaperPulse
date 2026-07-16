@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +27,24 @@ class DigestResult:
     ranked: list[RankedPaper]
     contradictions: list[ContradictionPair]
     path: Path | None = None
+
+
+@dataclass
+class DiffResult:
+    """"What changed since last week" for one tracked category set."""
+
+    since: str  # ISO timestamp of the snapshot compared against ("" if none)
+    new_papers: list[RankedPaper] = field(default_factory=list)
+    # (topic entry, the paper that is fresh evidence for it)
+    factor_evidence: list[tuple] = field(default_factory=list)
+    # (paper_a, paper_b, note) for pairs whose disagreement reversed direction
+    polarity_flips: list[tuple] = field(default_factory=list)
+
+    @property
+    def is_first_run(self) -> bool:
+        """No prior snapshot: everything is trivially "new", so callers should
+        say "no baseline yet" rather than dump the whole batch as changes."""
+        return not self.since
 
 
 def _load_backend(config: Config):
@@ -55,6 +73,16 @@ def _fetch(config: Config) -> list[Paper]:
         max_results=config.max_results,
     )
     return source.fetch(query)
+
+
+def _topic_text(entry) -> str:
+    """The text a topic entry is embedded as: its name plus aliases.
+
+    Deliberately excludes ``notes`` -- those are free-text lab notes ("tried 6
+    variants over 2025, no edge") that describe the *outcome*, not the topic,
+    and dilute the vector away from what we're matching against.
+    """
+    return " ".join([entry.name, *entry.aliases]).strip()
 
 
 def _literature_reference_texts(topics: list | None) -> list[str]:
@@ -92,6 +120,13 @@ def _attach_trust(config: Config, ranked: list[RankedPaper], backend=None) -> No
         if reference_texts:
             literature_matrix = backend.encode(reference_texts)
 
+    # Embed the known-topics log once per run (not per paper) when the opt-in
+    # semantic match is enabled -- same "compute once, pass via context" shape
+    # as literature_matrix above.
+    topic_matrix = None
+    if config.known_topics_semantic and backend is not None and topics:
+        topic_matrix = backend.encode([_topic_text(t) for t in topics])
+
     for item in ranked:
         full_text = None
         if config.trust_online:
@@ -99,16 +134,32 @@ def _attach_trust(config: Config, ranked: list[RankedPaper], backend=None) -> No
 
             full_text = fetch_full_text(item.paper)
 
-        literature_crowding = None
-        if literature_matrix is not None and backend is not None:
+        # Reuse the vector computed during ranking; fall back to encoding only
+        # for callers that construct RankedPapers directly (e.g. tests).
+        paper_vec = item.vector
+        if paper_vec is None and backend is not None:
             paper_vec = backend.encode([item.paper.as_text()])[0]
+
+        literature_crowding = None
+        if literature_matrix is not None and paper_vec is not None:
             literature_crowding = float((literature_matrix @ paper_vec).max())
+
+        semantic_topic = None
+        semantic_similarity = None
+        if topic_matrix is not None and paper_vec is not None and topics:
+            sims = topic_matrix @ paper_vec
+            best = int(np.argmax(sims))
+            if float(sims[best]) >= config.known_topics_semantic_threshold:
+                semantic_topic = topics[best]
+                semantic_similarity = float(sims[best])
 
         ctx = trust_mod.SignalContext(
             crowding=item.crowding,
             full_text=full_text,
             topics=topics,
             literature_crowding=literature_crowding,
+            semantic_topic=semantic_topic,
+            semantic_topic_similarity=semantic_similarity,
             **context_base,
         )
         item.trust = trust_mod.assess(item.paper, enabled=signals, context=ctx)
@@ -229,9 +280,12 @@ def run_digest(
     subtitle = f"{config.source} · " + " · ".join(config.categories)
     markdown = render_markdown(ranked, subtitle=subtitle)
 
+    result = DigestResult(markdown=markdown, ranked=ranked, contradictions=contradictions)
+
     output_path: Path | None = None
     if not dry_run:
         _record_community(config, ranked)
+        state.add_snapshot(snapshot_key(config), _make_snapshot(result))
         for item in ranked:
             state.seen_ids.add(item.paper.id)
             state.shown[item.paper.id] = {
@@ -244,12 +298,121 @@ def run_digest(
         output_path.write_text(markdown, encoding="utf-8")
         state.save(config.state_path)
 
-    return DigestResult(
-        markdown=markdown,
-        ranked=ranked,
-        contradictions=contradictions,
-        path=output_path,
-    )
+    result.path = output_path
+    return result
+
+
+def snapshot_key(config: Config) -> str:
+    """Snapshots are per category set, so a q-fin digest never diffs against a
+    cs.LG one. Sorted so ["a","b"] and ["b","a"] are the same tracked subfield."""
+    return ",".join(sorted(config.categories))
+
+
+def _make_snapshot(result: DigestResult) -> dict:
+    return {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "papers": {
+            item.paper.id: {
+                "title": item.paper.title,
+                "score": round(item.score, 4),
+                "badge": item.trust.badge if item.trust else "",
+                "flags": [s.name for s in item.trust.flags] if item.trust else [],
+            }
+            for item in result.ranked
+        },
+        # Keyed a|b so a pair is identity-comparable across runs; the stored
+        # polarity is what lets us see the disagreement reverse.
+        "contradictions": {
+            f"{p.a.id}|{p.b.id}": {"polarity_a": p.polarity_a, "polarity_b": p.polarity_b}
+            for p in result.contradictions
+        },
+    }
+
+
+def new_factor_evidence(
+    config: Config,
+    ranked: list[RankedPaper],
+    *,
+    days: int = 7,
+    mark: bool = True,
+) -> list[tuple]:
+    """Tracked dead/weak factors with fresh matching evidence in ``ranked``.
+
+    "Fresh" means the topic hasn't been matched in the last ``days`` -- the
+    ``last_seen_at`` logic behind `paperpulse factors check`, lifted out of the
+    CLI so `paperpulse diff` and `GET /api/diff` share it rather than reimplement.
+
+    ``mark`` updates ``last_seen_at``. Callers that must not mutate (the read-only
+    API endpoint, where a GET is expected to be safe to repeat) pass False.
+    """
+    if not config.topics_db:
+        return []
+    from .topics import TopicLog
+
+    log = TopicLog(config.topics_db)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    found: list[tuple] = []
+    try:
+        entries = {e.name: e for e in log.all()}
+        for item in ranked:
+            if item.trust is None:
+                continue
+            matched = next(
+                (s for s in item.trust.signals if s.name == "known_topic" and s.evidence),
+                None,
+            )
+            if matched is None:
+                continue
+            entry = entries.get(matched.evidence)
+            if entry is None or entry.result not in ("dead", "weak"):
+                continue
+            is_new = not entry.last_seen_at or (
+                datetime.fromisoformat(entry.last_seen_at) < cutoff
+            )
+            if is_new:
+                found.append((entry, item))
+            if mark:
+                log.mark_seen(entry.name)
+    finally:
+        log.close()
+    return found
+
+
+def diff_digest(config: Config, *, user: str = DEFAULT_USER, mark: bool = False) -> DiffResult:
+    """Compare today's batch against the most recent snapshot for this category set.
+
+    Runs with ``skip_seen=False`` on purpose: the normal digest hides papers
+    you've already been shown, which would make every survivor look "new" and
+    the diff meaningless. We want the true current batch, then diff it against
+    what was actually recorded last time.
+    """
+    result = run_digest(config, user=user, skip_seen=False, dry_run=True)
+    state = State.load(config.state_path)
+    previous = state.latest_snapshot(snapshot_key(config))
+
+    diff = DiffResult(since=previous["ts"] if previous else "")
+    diff.factor_evidence = new_factor_evidence(config, result.ranked, mark=mark)
+
+    if previous is None:
+        return diff
+
+    seen_before = set(previous.get("papers", {}))
+    diff.new_papers = [i for i in result.ranked if i.paper.id not in seen_before]
+
+    before = previous.get("contradictions", {})
+    for pair in result.contradictions:
+        prior = before.get(f"{pair.a.id}|{pair.b.id}")
+        if prior and prior.get("polarity_a") != pair.polarity_a:
+            diff.polarity_flips.append(
+                (
+                    pair.a,
+                    pair.b,
+                    f"Disagreement reversed: '{pair.a.title}' went from "
+                    f"{'positive' if prior['polarity_a'] > 0 else 'negative'} to "
+                    f"{'positive' if pair.polarity_a > 0 else 'negative'}.",
+                )
+            )
+    return diff
 
 
 # Maps a `feedback --reason` to what gets logged in the shared topics table.
