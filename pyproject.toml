@@ -57,5 +57,11 @@ ignore_missing_imports = false
 # Optional extras: guarded by try/except ImportError at their call sites and not
 # installed in the base env, so mypy can't see them. Everything else must type.
 [[tool.mypy.overrides]]
-module = ["openai.*", "anthropic.*", "pypdf.*", "sklearn.*"]
+module = [
+    "openai.*",
+    "anthropic.*",
+    "pypdf.*",
+    "sklearn.*",
+    "sentence_transformers.*",
+]
 ignore_missing_imports = true
