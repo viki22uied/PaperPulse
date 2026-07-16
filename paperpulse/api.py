@@ -18,13 +18,15 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import defaultdict
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 from . import market
 from .config import Config
-from .pipeline import apply_feedback, run_digest
+from .pipeline import DigestResult, apply_feedback, run_digest
 from .sources import available
 
 # Topic filter catalog: group -> [(arXiv category, friendly label), ...]. The
@@ -58,18 +60,21 @@ TOPIC_CATALOG = {
 _ALL_CATS = {cat for group in TOPIC_CATALOG.values() for cat, _ in group}
 
 _DIGEST_CACHE_TTL = 300  # seconds; re-fetching arXiv on every page hit is wasteful and slow
-_digest_cache: dict = {}  # cats-key -> {"result", "ts"}
-_digest_lock = threading.Lock()
+_digest_cache: dict[tuple[str, ...], dict[str, Any]] = {}  # cats-key -> {"result", "ts"}
+_key_locks: defaultdict[tuple[str, ...], threading.Lock] = defaultdict(threading.Lock)
+_key_locks_guard = threading.Lock()  # only guards handing out the per-key locks
 
 
-def _cached_digest(config: Config):
-    # ponytail: one global lock, so fetches for different filters serialize --
-    # fine for a single-user local tool and it keeps us from hammering arXiv.
+def _cached_digest(config: Config) -> DigestResult:
+    # One lock per cats-key: different filters fetch concurrently, but concurrent
+    # requests for the *same* filter still collapse into a single arXiv fetch.
     key = tuple(sorted(config.categories))
-    with _digest_lock:
+    with _key_locks_guard:
+        lock = _key_locks[key]
+    with lock:
         entry = _digest_cache.get(key)
         if entry and time.time() - entry["ts"] < _DIGEST_CACHE_TTL:
-            return entry["result"]
+            return cast(DigestResult, entry["result"])
         result = run_digest(config, dry_run=True)
         _digest_cache[key] = {"result": result, "ts": time.time()}
         return result

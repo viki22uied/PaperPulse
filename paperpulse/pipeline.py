@@ -57,7 +57,7 @@ def _fetch(config: Config) -> list[Paper]:
     return source.fetch(query)
 
 
-def _literature_reference_texts(topics: list) -> list[str]:
+def _literature_reference_texts(topics: list | None) -> list[str]:
     from .literature import CANONICAL_FACTOR_PAPERS
 
     topic_texts = [
@@ -169,7 +169,7 @@ def _record_community(config: Config, ranked: list[RankedPaper]) -> None:
                 score=item.trust.score,
                 badge=item.trust.badge,
                 flags=[s.name for s in item.trust.flags],
-                venue=(item.paper.categories or [None])[0],
+                venue=item.paper.categories[0] if item.paper.categories else None,
                 authors=item.paper.authors,
             )
     finally:

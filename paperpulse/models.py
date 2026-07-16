@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:  # trust imports models, so this can't be a runtime import
+    from .trust import TrustReport
 
 
 @dataclass
@@ -45,7 +48,7 @@ class RankedPaper:
     score: float
     summary: Optional[str] = None
     # Populated with a paperpulse.trust.TrustReport when trust signals are on.
-    trust: Optional[object] = None
+    trust: Optional["TrustReport"] = None
     # Mean similarity to nearest neighbours in the same batch (novelty proxy).
     crowding: Optional[float] = None
     # Detected market/region tags (B1), e.g. ["USA"] or ["Global/Unspecified"].
