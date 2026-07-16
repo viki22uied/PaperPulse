@@ -108,6 +108,16 @@ def _fetch_page(query: str, start: int, page_size: int, timeout: float) -> list[
             if exc.code not in (429, 503) or attempt == 1:
                 raise
             time.sleep(3)  # back off: arXiv is rate-limiting us
+        except (TimeoutError, urllib.error.URLError) as exc:
+            # arXiv sometimes stalls a request instead of refusing it -- a read
+            # timeout surfaces as a bare TimeoutError (not an HTTPError) and was
+            # taking down the whole scheduled digest. Give a transient stall one
+            # retry; a persistent outage still raises on the second attempt.
+            # ponytail: single retry, not a full backoff ladder -- the cron runs
+            # daily, a genuinely-down arXiv can wait for tomorrow.
+            if attempt == 1:
+                raise
+            time.sleep(3)
     return [_entry_to_paper(e) for e in root.findall("atom:entry", _NS)]
 
 
