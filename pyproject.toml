@@ -51,7 +51,9 @@ include = ["paperpulse*"]
 exclude = ["tests*"]
 
 [tool.mypy]
-python_version = "3.10"
+# No python_version pin: each CI matrix job checks against its own interpreter,
+# so 3.10/3.11/3.12 all get covered. Pinning it here made mypy parse the newer
+# numpy stubs (which use 3.12 `type` statements) as 3.10 syntax and hard-fail.
 ignore_missing_imports = false
 
 # Optional extras: guarded by try/except ImportError at their call sites and not
