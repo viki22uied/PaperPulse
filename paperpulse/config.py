@@ -41,6 +41,22 @@ class Config:
     trust_signals: list[str] | None = None  # None => library defaults
     trust_online: bool = False  # enable network checks (links, retractions)
 
+    # Known-topics semantic match (opt-in). The default name/alias match is
+    # deterministic and exact; this adds an embedding cosine fallback so a
+    # paraphrase of a logged topic ("female representation among corporate
+    # directors" vs a logged "board diversity") still matches.
+    #
+    # Requires `embedding_backend` to be a semantic one -- it is INERT with the
+    # default hashing backend, which is a bag of n-grams and shares no tokens
+    # with a paraphrase (measured: paraphrases score 0.00-0.06 there, so
+    # nothing ever clears the threshold). Install the `semantic` extra.
+    #
+    # 0.35 is the measured max-margin split on the labeled sample in
+    # tests/test_known_topics_semantic.py (highest negative 0.29, lowest
+    # positive 0.40) with sentence-transformers: tp 5/5, fp 0/7.
+    known_topics_semantic: bool = False
+    known_topics_semantic_threshold: float = 0.35
+
     # Region tagging (B1/B2)
     region_filter: list[str] = field(default_factory=list)  # [] => no filter
     region_filter_include_unspecified: bool = True

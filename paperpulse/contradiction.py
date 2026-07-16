@@ -40,6 +40,11 @@ class ContradictionPair:
     b: Paper
     similarity: float
     note: str
+    # Sign of each side's claim (+1/-1). A pair only forms when these oppose,
+    # so the *assignment* is what a diff compares: if `a` was the positive side
+    # last run and is the negative side now, the disagreement has flipped.
+    polarity_a: int = 0
+    polarity_b: int = 0
 
 
 def contradiction_map(
@@ -70,6 +75,8 @@ def contradiction_map(
                         b=papers[j],
                         similarity=sim,
                         note="Closely related but express opposing outcomes.",
+                        polarity_a=1 if pi > 0 else -1,
+                        polarity_b=1 if pj > 0 else -1,
                     )
                 )
     pairs.sort(key=lambda p: p.similarity, reverse=True)

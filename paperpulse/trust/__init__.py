@@ -64,6 +64,11 @@ class SignalContext:
     topics: list | None = None
     # Max cosine similarity to the canonical-literature reference set (E2).
     literature_crowding: float | None = None
+    # Best embedding match from the known-topics log, when the opt-in semantic
+    # match (`known_topics_semantic`) is on and it cleared the threshold. Only
+    # consulted when the deterministic name/alias match found nothing.
+    semantic_topic: object | None = None
+    semantic_topic_similarity: float | None = None
 
 
 SignalFn = Callable[..., Signal]
@@ -122,13 +127,13 @@ def assess(
     """Run the enabled signals over a paper and aggregate into a report."""
     names = enabled if enabled is not None else DEFAULT_SIGNALS
     ctx = context or SignalContext()
-    kwargs = {
-        "crowding": ctx.crowding,
-        "full_text": ctx.full_text,
-        "online": ctx.online,
-        "topics": ctx.topics,
-        "literature_crowding": ctx.literature_crowding,
-    }
+    # Pass the whole context through: every signal takes **_, so it ignores what
+    # it doesn't use. Listing the fields by hand here silently dropped any newly
+    # added context field -- the signal just saw the parameter default and
+    # reported "no match" instead of failing loudly.
+    # vars(), not asdict(): asdict() recurses and would turn the TopicEntry
+    # objects in `topics` into plain dicts.
+    kwargs = vars(ctx)
 
     signals: list[Signal] = []
     for name in names:

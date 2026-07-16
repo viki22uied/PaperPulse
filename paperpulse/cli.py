@@ -156,9 +156,7 @@ def _cmd_factors_add(args: argparse.Namespace) -> int:
 def _cmd_factors_check(args: argparse.Namespace) -> int:
     """F2: run today's digest and report new evidence on tracked dead/weak
     factors -- "new" meaning not seen (matched) in the last 7 days."""
-    from datetime import datetime, timedelta, timezone
-
-    from .topics import TopicLog
+    from .pipeline import new_factor_evidence
 
     config = Config.load(args.config)
     if not config.topics_db:
@@ -166,34 +164,48 @@ def _cmd_factors_check(args: argparse.Namespace) -> int:
         return 1
 
     result = run_digest(config, dry_run=True)
-    log = TopicLog(config.topics_db)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-    hits = 0
-    try:
-        entries = {e.name: e for e in log.all()}
-        for item in result.ranked:
-            if item.trust is None:
-                continue
-            matched = next(
-                (s for s in item.trust.signals if s.name == "known_topic" and s.evidence),
-                None,
-            )
-            if matched is None:
-                continue
-            entry = entries.get(matched.evidence)
-            if entry is None or entry.result not in ("dead", "weak"):
-                continue
-            is_new = not entry.last_seen_at or (
-                datetime.fromisoformat(entry.last_seen_at) < cutoff
-            )
-            if is_new:
-                hits += 1
-                print(f"New evidence on '{entry.name}' ({entry.result}): {item.paper.title}")
-            log.mark_seen(entry.name)
-    finally:
-        log.close()
-    if not hits:
+    found = new_factor_evidence(config, result.ranked, mark=True)
+    for entry, item in found:
+        print(f"New evidence on '{entry.name}' ({entry.result}): {item.paper.title}")
+    if not found:
         print("No new evidence on tracked dead/weak factors in today's batch.")
+    return 0
+
+
+def _cmd_diff(args: argparse.Namespace) -> int:
+    """What changed since the last recorded run for this category set."""
+    from .pipeline import diff_digest
+
+    config = Config.load(args.config)
+    diff = diff_digest(config, mark=args.mark)
+
+    if diff.is_first_run:
+        print(
+            "No previous snapshot for these categories yet -- run `paperpulse run` "
+            "once to record a baseline, then diff against it."
+        )
+        return 0
+
+    print(f"Changes since {diff.since[:19]} ({', '.join(sorted(config.categories))}):\n")
+
+    print(f"New papers ({len(diff.new_papers)}):")
+    for item in diff.new_papers:
+        badge = f" [{item.trust.badge}]" if item.trust else ""
+        print(f"  - {item.paper.title}{badge}")
+    if not diff.new_papers:
+        print("  (none)")
+
+    print(f"\nFresh evidence on tracked dead/weak factors ({len(diff.factor_evidence)}):")
+    for entry, item in diff.factor_evidence:
+        print(f"  - {entry.name} ({entry.result}): {item.paper.title}")
+    if not diff.factor_evidence:
+        print("  (none)")
+
+    print(f"\nContradictions that flipped ({len(diff.polarity_flips)}):")
+    for _a, _b, note in diff.polarity_flips:
+        print(f"  - {note}")
+    if not diff.polarity_flips:
+        print("  (none)")
     return 0
 
 
@@ -299,6 +311,17 @@ def build_parser() -> argparse.ArgumentParser:
         "check", help="run today's digest and report new evidence on tracked dead/weak factors (F2)"
     )
     p_factors_check.set_defaults(func=_cmd_factors_check)
+
+    p_diff = sub.add_parser(
+        "diff", help="what changed since the last run for this category set"
+    )
+    p_diff.add_argument(
+        "--mark",
+        action="store_true",
+        help="update last_seen_at on reported factors (default: leave untouched, "
+        "so repeating the diff shows the same answer)",
+    )
+    p_diff.set_defaults(func=_cmd_diff)
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)
