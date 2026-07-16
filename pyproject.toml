@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperpulse"
-version = "0.2.0"
+dynamic = ["version"]  # single source of truth: paperpulse/__init__.py
 description = "Relevance-ranked arXiv digests: the few papers that actually matter to you, summarised."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,7 @@ dependencies = [
 semantic = ["sentence-transformers>=2.2,<6"]
 llm = ["openai>=1.0,<2", "anthropic>=0.30,<1"]
 pdf = ["pypdf>=4.0,<6"]
-dev = ["pytest>=7.0,<10"]
+dev = ["pytest>=7.0,<10", "mypy>=1.8,<2", "types-PyYAML"]
 all = [
     "sentence-transformers>=2.2,<6",
     "openai>=1.0,<2",
@@ -43,6 +43,19 @@ Homepage = "https://github.com/viki22uied/PaperPulse"
 Repository = "https://github.com/viki22uied/PaperPulse"
 Issues = "https://github.com/viki22uied/PaperPulse/issues"
 
+[tool.setuptools.dynamic]
+version = { attr = "paperpulse.__version__" }
+
 [tool.setuptools.packages.find]
 include = ["paperpulse*"]
 exclude = ["tests*"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = false
+
+# Optional extras: guarded by try/except ImportError at their call sites and not
+# installed in the base env, so mypy can't see them. Everything else must type.
+[[tool.mypy.overrides]]
+module = ["openai.*", "anthropic.*", "pypdf.*", "sklearn.*"]
+ignore_missing_imports = true

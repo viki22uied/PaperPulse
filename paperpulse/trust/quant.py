@@ -226,13 +226,14 @@ def survivorship_bias_signal(paper: Paper, **_) -> Signal:
     """Backtests that never mention delisted/failed firms are a classic
     survivorship-bias tell -- the sample quietly excludes the losers."""
     text = paper.abstract
-    if BACKTEST_TERMS.search(text) and not SURVIVORSHIP_TERMS.search(text):
+    backtest = BACKTEST_TERMS.search(text)
+    if backtest and not SURVIVORSHIP_TERMS.search(text):
         return Signal(
             "survivorship_bias",
             WARN,
             "Backtest with no mention of delisted/failed firms; sample may "
             "suffer from survivorship bias.",
-            evidence=BACKTEST_TERMS.search(text).group(0),
+            evidence=backtest.group(0),
             confidence=0.5,
         )
     return Signal("survivorship_bias", OK, "No survivorship-bias red flag.")

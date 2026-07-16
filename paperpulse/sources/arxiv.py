@@ -13,10 +13,12 @@ import urllib.request
 from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
+from .. import __version__
 from ..models import Paper
 from .base import Query, register
 
 API_URL = "https://export.arxiv.org/api/query"
+USER_AGENT = f"PaperPulse/{__version__} (+https://github.com/viki22uied/PaperPulse)"
 
 _NS = {
     "atom": "http://www.w3.org/2005/Atom",
@@ -95,7 +97,7 @@ def _fetch_page(query: str, start: int, page_size: int, timeout: float) -> list[
     )
     request = urllib.request.Request(
         f"{API_URL}?{params}",
-        headers={"User-Agent": "PaperPulse/0.1 (+https://github.com/)"},
+        headers={"User-Agent": USER_AGENT},
     )
     for attempt in range(2):
         try:
