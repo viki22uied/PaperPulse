@@ -16,7 +16,9 @@ capabilities as the CLI:
 
 from __future__ import annotations
 
+import hmac
 import json
+import os
 import threading
 import time
 from collections import defaultdict
@@ -456,6 +458,15 @@ def make_handler(config: Config):
                 self._json({"error": "not found"}, 404)
 
         def do_POST(self) -> None:
+            # Opt-in write protection: when PAPERPULSE_API_TOKEN is set (e.g.
+            # for a network-exposed instance), POSTs must carry it as a Bearer
+            # token. Unset = open, the localhost default.
+            token = os.environ.get("PAPERPULSE_API_TOKEN")
+            if token:
+                supplied = self.headers.get("Authorization", "")
+                if not hmac.compare_digest(supplied, f"Bearer {token}"):
+                    self._json({"error": "unauthorized"}, 401)
+                    return
             path = urlparse(self.path).path
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length) if length else b"{}"

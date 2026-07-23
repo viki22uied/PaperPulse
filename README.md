@@ -34,10 +34,14 @@ and LLM summaries when you want them.
 
 ```bash
 pip install paperpulse    # or: pip install -e .  (from a clone)
-paperpulse init           # write a starter paperpulse.yaml
-# edit `interests` and `categories`
+paperpulse init           # interactive wizard; or --preset finance|econ|ml|bio
 paperpulse run            # today's ranked, trust-scored digest -> digests/YYYY-MM-DD.md
 ```
+
+> **New CLI design (0.2.0):** `init` is now a short interactive wizard (pick a
+> topic pack, describe your interests — or skip it with `--preset`), `run`
+> shows live progress instead of sitting silent, and failures print a one-line
+> explanation instead of a traceback (`--debug` for the full one).
 
 The [sample digest](examples/sample-digest.md) is annotated to show the finance
 paper getting a 🚩 *leakage* flag and the hype paper collecting four flags while a
@@ -179,7 +183,9 @@ diversity, delivery, `avoid_topics`, `region_filter`, and `topics_db`.
 
 Secrets are read from the environment, never the config file:
 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (LLM summaries), `PAPERPULSE_SMTP_*`
-(email), `PAPERPULSE_SLACK_WEBHOOK` / `PAPERPULSE_DISCORD_WEBHOOK`, `NCBI_API_KEY`.
+(email), `PAPERPULSE_SLACK_WEBHOOK` / `PAPERPULSE_DISCORD_WEBHOOK`, `NCBI_API_KEY`,
+and `PAPERPULSE_API_TOKEN` (when set, dashboard/API POSTs require it as a
+Bearer token — set this if you expose `paperpulse serve` beyond localhost).
 
 ## Scheduling
 
