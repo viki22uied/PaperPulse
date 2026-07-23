@@ -168,6 +168,10 @@ exercised by you once keys/egress are in place — they fail soft until then.
 
 ## Infra / meta
 - ✅ CLI + Python SDK + REST API — three ways to use it
+- ✅ First-run UX (0.2.0): interactive `init` wizard + `--preset` topic packs,
+  live progress during `run`, one-line friendly errors with `--debug` escape
+- ✅ Hardening (0.2.0): opt-in `PAPERPULSE_API_TOKEN` on API writes; PDF
+  fetches restricted to https + known publisher hosts
 - ✅ Self-hostable via Docker / docker-compose
 - ✅ Config-driven sources / signals / delivery
 - ✅ Offline test suite, CI across Python 3.10–3.12

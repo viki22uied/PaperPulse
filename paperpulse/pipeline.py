@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -233,15 +234,24 @@ def run_digest(
     user: str = DEFAULT_USER,
     skip_seen: bool = True,
     dry_run: bool = False,
+    on_stage: Callable[[str], None] | None = None,
 ) -> DigestResult:
-    """Generate today's digest end to end."""
+    """Generate today's digest end to end.
+
+    ``on_stage`` (optional) is called with a short human-readable message at
+    each stage boundary, so callers like the CLI can show progress."""
+    stage = on_stage or (lambda _msg: None)
+
+    stage("Loading embedding backend…")
     backend = _load_backend(config)
     state = State.load(config.state_path)
     profile = ensure_profile(config, state, backend, user)
 
+    stage(f"Fetching {config.source} ({', '.join(config.categories)})…")
     papers = _fetch(config)
     if skip_seen:
         papers = [p for p in papers if p.id not in state.seen_ids]
+    stage(f"Ranking {len(papers)} papers…")
 
     avoid_vector = None
     if config.avoid_topics:
@@ -262,10 +272,12 @@ def run_digest(
         avoid_weight=config.avoid_weight,
     )
 
+    stage(f"Scoring trust for top {len(ranked)}…")
     _attach_trust(config, ranked, backend=backend)
     _attach_regions(config, ranked)
     ranked = _filter_regions(config, ranked)
 
+    stage("Summarising…")
     for item in ranked:
         item.summary = summarise(
             item.paper,

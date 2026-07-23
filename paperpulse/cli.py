@@ -7,23 +7,120 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 from .config import Config, DEFAULT_CONFIG_PATH
 from .pipeline import apply_feedback, find_similar_to_work, run_digest
+
+
+# Topic packs for `init`: preset name -> (categories, default interests).
+TOPIC_PACKS: dict[str, tuple[list[str], str]] = {
+    "finance": (
+        ["q-fin.*", "econ.EM"],
+        "Quantitative finance: asset pricing, portfolio and risk management, "
+        "market microstructure, econometrics, and systematic trading strategies.",
+    ),
+    "econ": (
+        ["econ.*", "q-fin.EC"],
+        "Economics research: econometrics, applied micro and macro, market "
+        "design, and policy evaluation.",
+    ),
+    "ml": (
+        ["cs.LG", "cs.CL", "stat.ML"],
+        "Machine learning methods for natural language processing, with an "
+        "interest in retrieval, embeddings, and practical model evaluation.",
+    ),
+    "bio": (
+        ["q-bio.*"],
+        "Quantitative biology: genomics, computational neuroscience, and "
+        "biomolecular modelling.",
+    ),
+}
+
+
+def build_init_config(
+    preset: str | None = None,
+    *,
+    interests: str | None = None,
+    categories: list[str] | None = None,
+) -> Config:
+    """Pure decision core of `paperpulse init`: answers in, Config out."""
+    config = Config()
+    if preset is not None:
+        pack_categories, pack_interests = TOPIC_PACKS[preset]
+        config.categories = list(pack_categories)
+        config.interests = pack_interests
+    if categories:
+        config.categories = list(categories)
+    if interests:
+        config.interests = interests
+    return config
+
+
+def _init_wizard() -> Config:
+    """Interactive init: two questions, Enter accepts the defaults."""
+    from rich.console import Console
+    from rich.prompt import Prompt
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="Topic packs", show_lines=False)
+    table.add_column("pack")
+    table.add_column("arXiv categories")
+    for name, (cats, _) in TOPIC_PACKS.items():
+        table.add_row(name, " ".join(cats))
+    table.add_row("custom", "type your own")
+    console.print(table)
+
+    choice = Prompt.ask(
+        "Topic pack", choices=[*TOPIC_PACKS, "custom"], default="ml", console=console
+    )
+    categories = None
+    if choice == "custom":
+        raw = Prompt.ask(
+            "arXiv categories (space-separated)", default="cs.LG cs.CL", console=console
+        )
+        categories = raw.split()
+        preset = None
+    else:
+        preset = choice
+    default_interests = TOPIC_PACKS[choice][1] if choice in TOPIC_PACKS else Config().interests
+    interests = Prompt.ask(
+        "Describe your interests (one sentence)",
+        default=default_interests,
+        console=console,
+    )
+    return build_init_config(preset, interests=interests, categories=categories)
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
     if DEFAULT_CONFIG_PATH.exists() and not args.force:
         print(f"{DEFAULT_CONFIG_PATH} already exists (use --force to overwrite).")
         return 1
-    config = Config()
+
+    if args.preset:
+        config = build_init_config(args.preset)
+    elif sys.stdin.isatty() and sys.stdout.isatty():
+        config = _init_wizard()
+    else:
+        config = Config()  # non-interactive starter file, as before
+
     if args.seed_avoid:
         text = Path(args.seed_avoid).read_text(encoding="utf-8")
         topics = [t.strip() for t in re.split(r"[,\n]", text) if t.strip()]
         config.avoid_topics = topics
     path = config.save()
-    print(
-        f"Wrote starter config to {path}. Edit `interests`, `categories`, and "
-        f"`source`, then run `paperpulse run`."
+
+    from rich.console import Console
+    from rich.panel import Panel
+
+    Console().print(
+        Panel(
+            f"Wrote [bold]{path}[/bold] "
+            f"({', '.join(config.categories)}).\n"
+            f"Next: [bold cyan]paperpulse run[/bold cyan]",
+            title="paperpulse init",
+        )
     )
     if args.seed_avoid:
         print(f"Seeded {len(config.avoid_topics)} avoid_topics from {args.seed_avoid}.")
@@ -31,6 +128,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    from rich.console import Console
+
     config = Config.load(args.config)
     if args.top_n:
         config.top_n = args.top_n
@@ -43,12 +142,25 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.online:
         config.trust_online = True
 
-    result = run_digest(
-        config,
-        user=args.user,
-        skip_seen=not args.include_seen,
-        dry_run=args.dry_run,
-    )
+    # Progress goes to stderr so `paperpulse run > digest.md` stays clean.
+    err = Console(stderr=True)
+    if err.is_terminal:
+        with err.status("Starting…") as status:
+            result = run_digest(
+                config,
+                user=args.user,
+                skip_seen=not args.include_seen,
+                dry_run=args.dry_run,
+                on_stage=status.update,
+            )
+    else:
+        result = run_digest(
+            config,
+            user=args.user,
+            skip_seen=not args.include_seen,
+            dry_run=args.dry_run,
+            on_stage=lambda msg: print(msg, file=sys.stderr),
+        )
     print(result.markdown)
     if result.contradictions and not args.dry_run:
         print("\n### Possible contradictions in today's batch\n", file=sys.stderr)
@@ -235,10 +347,19 @@ def build_parser() -> argparse.ArgumentParser:
         prog="paperpulse", description="Relevance-ranked, trust-scored arXiv digests."
     )
     parser.add_argument("-c", "--config", default=None, help="path to paperpulse.yaml")
+    parser.add_argument(
+        "--debug", action="store_true", help="show full tracebacks on error"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="write a starter config file")
     p_init.add_argument("--force", action="store_true")
+    p_init.add_argument(
+        "--preset",
+        choices=sorted(TOPIC_PACKS),
+        default=None,
+        help="skip the wizard and use a topic pack",
+    )
     p_init.add_argument(
         "--seed-avoid",
         default=None,
@@ -334,6 +455,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _friendly_error(exc: Exception) -> str | None:
+    """Map known failure modes to a one-line human message; None = unknown."""
+    import urllib.error
+
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code in (429, 503):
+            return (
+                f"The paper source is rate-limiting us (HTTP {exc.code}) -- "
+                "wait a minute and retry."
+            )
+        return f"The paper source returned HTTP {exc.code}."
+    if isinstance(exc, urllib.error.URLError):
+        return f"Network problem reaching the paper source: {exc.reason}"
+    if isinstance(exc, TimeoutError):
+        return "The paper source timed out -- check your connection and retry."
+    if isinstance(exc, yaml.YAMLError):
+        return f"paperpulse.yaml is not valid YAML: {exc}"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     # Digests carry emoji/unicode badges; a non-UTF-8 console codepage (the
     # Windows default) would otherwise crash on print() rather than showing them.
@@ -342,7 +483,22 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        if args.debug:
+            raise
+        message = _friendly_error(exc)
+        if message is None:
+            message = f"{type(exc).__name__}: {exc}"
+        from rich.console import Console
+
+        Console(stderr=True).print(
+            f"[red]Error:[/red] {message}\n[dim]Re-run with --debug for the full traceback.[/dim]"
+        )
+        return 1
 
 
 if __name__ == "__main__":
