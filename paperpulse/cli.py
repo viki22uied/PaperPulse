@@ -207,6 +207,56 @@ def _cmd_similar(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_alpha(args: argparse.Namespace) -> int:
+    """Today's papers as alpha cards: what each one actually claims, and what
+    you'd need to replicate it."""
+    from rich.console import Console
+    from rich.table import Table
+
+    config = Config.load(args.config)
+    config.alpha_cards = True
+    if args.top_n:
+        config.top_n = args.top_n
+
+    err = Console(stderr=True)
+    on_stage = (lambda msg: None) if args.quiet else lambda msg: err.print(f"[dim]{msg}[/dim]")
+    result = run_digest(config, dry_run=True, on_stage=on_stage)
+
+    table = Table(title="Alpha cards", show_lines=True)
+    table.add_column("paper", max_width=44)
+    table.add_column("testable", justify="center")
+    table.add_column("reported")
+    table.add_column("data")
+    table.add_column("period")
+
+    rows = 0
+    for item in result.ranked:
+        card = item.alpha
+        if card is None:
+            continue
+        if args.min_testability and card.testability_score < args.min_testability:
+            continue
+        colour = {"strong": "green", "partial": "yellow"}.get(card.testability, "dim")
+        table.add_row(
+            item.paper.title,
+            f"[{colour}]{card.testability} {card.testability_score}/4[/{colour}]",
+            ", ".join(card.effects) or "—",
+            ", ".join(card.data_sources) or "—",
+            card.period or "—",
+        )
+        rows += 1
+
+    console = Console()
+    if not rows:
+        console.print(
+            "No paper in today's batch makes a market claim at the requested "
+            "testability. Try `--min-testability 1`."
+        )
+        return 0
+    console.print(table)
+    return 0
+
+
 def _cmd_sources(_: argparse.Namespace) -> int:
     from .sources import available
 
@@ -443,6 +493,21 @@ def build_parser() -> argparse.ArgumentParser:
         "so repeating the diff shows the same answer)",
     )
     p_diff.set_defaults(func=_cmd_diff)
+
+    p_alpha = sub.add_parser(
+        "alpha", help="today's papers as alpha cards (claim, data, effect sizes)"
+    )
+    p_alpha.add_argument("--top-n", type=int, default=None)
+    p_alpha.add_argument(
+        "--min-testability",
+        type=int,
+        choices=[1, 2, 3, 4],
+        default=None,
+        help="only show cards specifying at least this many of "
+        "data/effect/universe/period",
+    )
+    p_alpha.add_argument("--quiet", action="store_true", help="hide progress")
+    p_alpha.set_defaults(func=_cmd_alpha)
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)

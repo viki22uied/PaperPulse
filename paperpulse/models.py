@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-if TYPE_CHECKING:  # trust imports models, so this can't be a runtime import
+if TYPE_CHECKING:  # trust/alpha import models, so these can't be runtime imports
+    from .alpha import AlphaCard
     from .trust import TrustReport
 
 
@@ -61,3 +62,6 @@ class RankedPaper:
     # Set when this paper's region isn't in already_tested_regions for a
     # matched known/tried topic (B2) -- a green "worth exploring" note.
     region_note: str = ""
+    # The paper's testable market claim (paperpulse.alpha.AlphaCard), or None
+    # when the paper makes no market claim to card.
+    alpha: Optional["AlphaCard"] = None

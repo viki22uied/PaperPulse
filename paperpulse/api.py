@@ -144,6 +144,12 @@ _SHELL = """<!doctype html>
  .up{color:#1a9d55} .down{color:#c0392b}
  .flags{margin:.5rem 0 .2rem;padding-left:1.1rem} .flags li{color:#c0392b;font-size:.85rem}
  .why{color:var(--muted);font-style:italic} .conf{color:var(--muted);font-size:.78rem}
+ .alpha{border:1px solid var(--line);border-radius:8px;padding:.6rem .8rem;margin:.6rem 0;font-size:.85rem}
+ .ahead{font-weight:600;margin-bottom:.35rem}
+ .atag{font-size:.72rem;padding:.1rem .45rem;border-radius:99px;margin-left:.3rem;color:#fff}
+ .atag.strong{background:#1a9d55} .atag.partial{background:#c98a00} .atag.vague{background:#6b7280}
+ .akey{color:var(--muted);text-transform:uppercase;font-size:.7rem;letter-spacing:.04em;margin-right:.35rem}
+ .amiss{color:var(--muted);font-style:italic;margin-top:.3rem}
  .prio{font-size:.75rem;padding:.1rem .5rem;border-radius:99px;background:var(--chip);color:var(--chipfg)}
  .meta{color:var(--muted);font-size:.85rem} a{color:var(--accent);text-decoration:none}
  .status{padding:2rem 0;color:var(--muted);text-align:center}
@@ -299,6 +305,20 @@ function render(papers){
         ' <span class="'+(q.change_pct>=0?"up":"down")+'">'+(q.change_pct>=0?"+":"")+q.change_pct+'%</span>';
       return '<span class="tk">'+esc(q.ticker)+' '+q.price+' '+esc(q.currency)+chg+'</span>';
     }).join("");
+    let alphaHtml = "";
+    if(p.alpha){
+      const a = p.alpha;
+      const row = (label, val) => val && val.length
+        ? '<div><span class="akey">'+label+'</span> '+esc(Array.isArray(val)?val.join(", "):val)+'</div>' : "";
+      alphaHtml =
+        '<div class="alpha"><div class="ahead">Alpha card '+
+          '<span class="atag '+esc(a.testability)+'">'+esc(a.testability)+' '+a.score+'/4</span></div>'+
+        row("claim", a.claim) + row("reported", a.effects) + row("data", a.data_sources) +
+        row("universe", a.universe) + row("period", a.period) +
+        (a.missing && a.missing.length
+          ? '<div class="amiss">not stated: '+esc(a.missing.join(", "))+'</div>' : "")+
+        '</div>';
+    }
     const region = (p.regions||[]).length ? '<div class="meta">Region: '+esc(p.regions.join(", "))+'</div>' : "";
     const regionNote = p.region_note ? '<div class="meta">✅ '+esc(p.region_note)+'</div>' : "";
     const card = document.createElement("div"); card.className="card";
@@ -308,7 +328,7 @@ function render(papers){
         ' <span class="badge '+badge+'">'+badge+'</span> '+prio+'</div>'+
       (quotes ? '<div class="market">'+quotes+'</div>' : '')+
       (p.summary ? '<p>'+esc(p.summary)+'</p>' : '')+
-      region + regionNote +
+      alphaHtml + region + regionNote +
       (flags ? '<ul class="flags">'+flags+'</ul>' : '')+
       '<div class="meta"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">abstract</a> · <code>'+esc(p.id)+'</code></div>';
     res.appendChild(card);
@@ -343,6 +363,18 @@ def _digest_json(config: Config) -> dict:
                 "region_note": item.region_note or None,
                 "url": item.paper.url,
                 "quotes": market.enrich(f"{item.paper.title} {item.paper.abstract}"),
+                "alpha": None
+                if item.alpha is None
+                else {
+                    "testability": item.alpha.testability,
+                    "score": item.alpha.testability_score,
+                    "claim": item.alpha.claim,
+                    "effects": item.alpha.effects,
+                    "data_sources": item.alpha.data_sources,
+                    "universe": item.alpha.universe,
+                    "period": item.alpha.period,
+                    "missing": item.alpha.missing,
+                },
                 "trust": None
                 if item.trust is None
                 else {

@@ -36,6 +36,11 @@ class Config:
     min_score: float = 0.0
     embedding_backend: str = "auto"  # auto | hashing | sentence-transformers
 
+    # Alpha cards: extract each finance paper's testable claim (predictor,
+    # data, effect sizes, universe, period) so you can see what replicating it
+    # would actually take. Offline regex; no effect on non-finance papers.
+    alpha_cards: bool = True
+
     # Trust signals
     trust: bool = True
     trust_signals: list[str] | None = None  # None => library defaults

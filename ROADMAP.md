@@ -103,6 +103,9 @@ exercised by you once keys/egress are in place — they fail soft until then.
   of being suppressed like a same-region repeat would be
 
 ## Quant-derived trust signals
+- ✅ Alpha cards (0.2.0) — extract each finance paper's testable claim
+  (predictor→target, datasets, effect sizes, universe, period) and rate its
+  testability; `paperpulse alpha`, digest, dashboard, and API
 - ✅ Novelty-vs-crowding score (batch embedding similarity)
 - ✅ Subgroup-robustness check
 - ✅ Metric-gaming detector

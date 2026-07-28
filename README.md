@@ -38,10 +38,40 @@ paperpulse init           # interactive wizard; or --preset finance|econ|ml|bio
 paperpulse run            # today's ranked, trust-scored digest -> digests/YYYY-MM-DD.md
 ```
 
-> **New CLI design (0.2.0):** `init` is now a short interactive wizard (pick a
-> topic pack, describe your interests — or skip it with `--preset`), `run`
-> shows live progress instead of sitting silent, and failures print a one-line
-> explanation instead of a traceback (`--debug` for the full one).
+> **New in 0.2.0:** `init` is now a short interactive wizard (pick a topic
+> pack, describe your interests — or skip it with `--preset`), `run` shows
+> live progress instead of sitting silent, and failures print a one-line
+> explanation instead of a traceback (`--debug` for the full one). Finance
+> papers now also get an **alpha card** — see below.
+
+### Alpha cards
+
+Relevance says a paper is in your area; the trust badge says whether to believe
+it. Neither answers what a systematic researcher asks next: *is there something
+implementable here, and what would testing it cost me?*
+
+For finance and economics papers PaperPulse extracts the **testable claim** from
+the abstract — the predictor and what it supposedly predicts, the datasets
+named, the reported effect sizes, the sample universe and period — then rates
+how much of that is actually specified:
+
+```bash
+paperpulse alpha                        # today's papers as alpha cards
+paperpulse alpha --min-testability 2    # only ones naming real data or numbers
+```
+
+```
+│ Idiosyncratic volatility and │ strong 4/4  │ Sharpe 1.24, │ CRSP,     │ 1990-2020 │
+│ the cross-section of returns │             │ t-stat 3.80  │ Compustat │           │
+│ The Quarter-Hour Effect in   │ partial 2/4 │ —            │ Binance   │ —         │
+│ A deep learning approach to  │ vague 0/4   │ —            │ —         │ —         │
+```
+
+A **vague** card is the useful part: the paper is about markets but names no
+data, no effect size, no period — there is nothing in the abstract you could go
+replicate, however clean its trust badge. Cards appear in the Markdown digest,
+the dashboard, and `/api/digest`. Deterministic regex, offline, no LLM; papers
+that make no market claim get no card at all.
 
 The [sample digest](examples/sample-digest.md) is annotated to show the finance
 paper getting a 🚩 *leakage* flag and the hype paper collecting four flags while a

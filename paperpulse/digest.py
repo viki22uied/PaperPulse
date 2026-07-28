@@ -42,6 +42,36 @@ def _trust_block(item: RankedPaper) -> list[str]:
     return lines
 
 
+_TESTABILITY_LABEL = {
+    "strong": "🎯 strong",
+    "partial": "🔎 partial",
+    "vague": "🌫️ vague",
+}
+
+
+def _alpha_block(item: RankedPaper) -> list[str]:
+    """The paper's testable claim, and what you'd still have to supply."""
+    card = item.alpha
+    if card is None:
+        return []
+    label = _TESTABILITY_LABEL.get(card.testability, card.testability)
+    lines = [f"**Alpha card:** {label} (testability {card.testability_score}/4)", ""]
+    if card.claim:
+        lines.append(f"- *Claim* — {card.claim}")
+    if card.effects:
+        lines.append(f"- *Reported* — {', '.join(card.effects)}")
+    if card.data_sources:
+        lines.append(f"- *Data* — {', '.join(card.data_sources)}")
+    if card.universe:
+        lines.append(f"- *Universe* — {', '.join(card.universe)}")
+    if card.period:
+        lines.append(f"- *Period* — {card.period}")
+    if card.missing:
+        lines.append(f"- *Not stated* — {', '.join(card.missing)}")
+    lines.append("")
+    return lines
+
+
 def render_markdown(
     ranked: list[RankedPaper],
     *,
@@ -79,6 +109,7 @@ def render_markdown(
             lines += [f"*Region: {', '.join(item.regions)}*", ""]
         if item.region_note:
             lines += [f"✅ {item.region_note}", ""]
+        lines += _alpha_block(item)
         lines += _trust_block(item)
         links = [f"[abstract]({paper.url})"]
         if paper.pdf_url:

@@ -9,6 +9,7 @@ from typing import Callable
 
 import numpy as np
 
+from . import alpha as alpha_mod
 from . import trust as trust_mod
 from .config import Config
 from .contradiction import ContradictionPair, contradiction_map
@@ -276,6 +277,10 @@ def run_digest(
     _attach_trust(config, ranked, backend=backend)
     _attach_regions(config, ranked)
     ranked = _filter_regions(config, ranked)
+
+    if config.alpha_cards:
+        for item in ranked:
+            item.alpha = alpha_mod.extract(item.paper)
 
     stage("Summarising…")
     for item in ranked:
