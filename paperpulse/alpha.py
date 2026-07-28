@@ -57,6 +57,10 @@ EFFECT_PATTERNS = {
     "Sharpe": r"\bSharpe(?:\s+ratios?)?\s*(?:of\s+|=\s*|:\s*)?(\d+\.\d+)",
     "t-stat": r"\bt[- ]?(?:stat(?:istic)?s?|value)?\s*(?:of\s+|=\s*|:\s*)?(-?\d+\.\d+)",
     "annual return": r"(\d+(?:\.\d+)?)\s*%\s*(?:per\s+annum|annual(?:ized|ised)?|p\.a\.)",
+    # Basis points are the standard unit for anomaly returns -- "48 bp per
+    # month" is a precise, checkable claim and must not read as unquantified.
+    "basis points": r"(\d+(?:\.\d+)?)\s*(?:bps?|basis\s+points?)\b",
+    "monthly return": r"(\d+(?:\.\d+)?)\s*%\s*per\s+month|monthly\s+returns?\s+of\s+(\d+(?:\.\d+)?)\s*%",
     "alpha": r"\balphas?\s*(?:of\s+|=\s*|:\s*)(-?\d+(?:\.\d+)?\s*%?)",
     "R²": r"\bR\^?2\s*(?:of\s+|=\s*|:\s*)?(\d*\.\d+)",
     "information ratio": r"\binformation\s+ratios?\s*(?:of\s+|=\s*|:\s*)?(\d+\.\d+)",
@@ -67,17 +71,30 @@ EFFECT_PATTERNS = {
 UNIVERSE_PATTERNS = {
     "US equities": r"\b(?:US|U\.S\.|American)\s+(?:stock|equit|share)|NYSE|NASDAQ|S&P\s*500|Russell\s*\d+",
     "global equities": r"\b(?:international|global|cross[- ]countr|world)\s+(?:stock|equit|market)",
+    # "DeFi" needs the trailing boundary: without it, case-insensitive matching
+    # finds "defi" inside "define"/"defined" and tags every theory paper crypto.
     "crypto": r"\b(?:crypto(?:currenc)?|bitcoin|ethereum|digital asset|"
-              r"stablecoin|USDT|USDC|perpetual (?:swap|future)|DeFi)",
+              r"stablecoin|USDT|USDC|perpetual (?:swap|future)|DeFi\b)",
     "FX": r"\b(?:foreign exchange|currency|FX)\s+(?:market|rate|carry)?",
     "fixed income": r"\b(?:bond|treasur|fixed[- ]income|credit spread|yield curve)",
     "commodities": r"\b(?:commodit|futures\s+market|crude oil|gold)",
     "options": r"\b(?:option|implied volatilit|derivative)",
 }
 
+# Checked only when no more specific equity market matched, so a paper about
+# "long-short equity portfolios" isn't left with no universe at all.
+_GENERIC_EQUITIES = re.compile(r"\b(?:stocks?|equit(?:y|ies)|share prices?)\b", re.I)
+
 # "from 1990 to 2020", "1990-2020", "over 1993--2019"
 _PERIOD = re.compile(
     r"\b(?:from\s+)?((?:19|20)\d{2})\s*(?:to|through|[-–—]{1,2})\s*((?:19|20)\d{2})\b"
+)
+# Half-open windows: papers often bound a sample on one side only
+# ("post-2005", "since 1990", "through 2005", "2006 onward").
+_PERIOD_OPEN = re.compile(
+    r"\b(?:(post|since|after|pre|before|through|until)[\s-]+((?:19|20)\d{2})"
+    r"|((?:19|20)\d{2})\s+(onward|onwards))\b",
+    re.I,
 )
 
 # "X predicts Y", "X forecasts Y" -- the core claim shape. Kept deliberately
@@ -150,16 +167,21 @@ def _find_effects(text: str) -> list[str]:
     for label, pattern in EFFECT_PATTERNS.items():
         match = re.search(pattern, text, re.I)
         if match:
-            value = match.group(1).strip()
-            found.append(f"{label} {value}")
+            # Patterns may offer several alternatives; take whichever captured.
+            value = next((g for g in match.groups() if g), "").strip()
+            if value:
+                found.append(f"{label} {value}")
     return found
 
 
 def _find_universe(text: str) -> list[str]:
-    return [
+    found = [
         name for name, pattern in UNIVERSE_PATTERNS.items()
         if re.search(pattern, text, re.I)
     ]
+    if not any(name.endswith("equities") for name in found) and _GENERIC_EQUITIES.search(text):
+        found.append("equities")
+    return found
 
 
 def _find_claim(text: str) -> str:
@@ -207,6 +229,14 @@ def extract(paper: Paper, *, full_text: str | None = None) -> AlphaCard | None:
         start, end = match.group(1), match.group(2)
         if int(end) > int(start):  # "2020-2019" is a typo, not a sample window
             period = f"{start}-{end}"
+    if not period:
+        open_match = _PERIOD_OPEN.search(claim_text)
+        if open_match:
+            word, year, year_after, onward = (
+                open_match.group(1), open_match.group(2),
+                open_match.group(3), open_match.group(4),
+            )
+            period = f"{word.lower()} {year}" if word else f"{year_after} {onward.lower()}"
 
     # Universe comes from the abstract only, which states what the paper is
     # actually about. Scanning a whole PDF for it is worse than useless: words

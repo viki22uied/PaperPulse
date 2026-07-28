@@ -165,3 +165,47 @@ def test_universe_is_not_polluted_by_the_whole_pdf():
     card = alpha.extract(paper, full_text=body)
     assert card is not None
     assert card.universe == ["crypto"]  # not fixed income / FX / US equities
+
+
+# --- gaps found by running over live arXiv output ---------------------------
+
+def test_basis_points_count_as_an_effect_size():
+    """bp is the standard unit for anomaly returns; "48 bp per month" is a
+    precise claim and must not read as unquantified."""
+    card = alpha.extract(
+        _paper(
+            "Across long-short anomaly equity portfolios, the median "
+            "zero-investment return was 48 bp per month through 2005."
+        )
+    )
+    assert card is not None
+    assert "basis points 48" in card.effects
+    assert card.universe == ["equities"]   # plain "equity portfolios" counts
+    assert card.period == "through 2005"   # one-sided windows are still periods
+    assert card.testability == "strong"
+
+
+def test_defi_does_not_match_the_word_defined():
+    """Case-insensitive 'DeFi' without a trailing boundary matched 'define',
+    tagging option-pricing theory papers as crypto."""
+    card = alpha.extract(
+        _paper(
+            "Risk-neutral marginals should be defined on the entire support, "
+            "with well-defined option prices."
+        )
+    )
+    assert card is not None
+    assert "crypto" not in card.universe
+
+
+def test_one_sided_period_forms():
+    for text, expected in [
+        ("Stock returns since 1990 were strong.", "since 1990"),
+        ("We study equity returns post-2005.", "post 2005"),
+        ("Equity data from 2006 onward.", "2006 onward"),
+    ]:
+        card = alpha.extract(_paper(text))
+        assert card is not None and card.period == expected, (text, card.period)
+    # A real two-sided range still wins over a one-sided mention.
+    card = alpha.extract(_paper("Stock returns from 1990 to 2020, and since 1970."))
+    assert card is not None and card.period == "1990-2020"
