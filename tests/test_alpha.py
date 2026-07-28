@@ -81,3 +81,87 @@ def test_digest_renders_alpha_block():
 def test_digest_omits_alpha_block_when_no_card():
     item = RankedPaper(paper=_paper("A transformer for translation."), score=0.5)
     assert "Alpha card" not in render_markdown([item])
+
+
+# --- full text (pdf extra) --------------------------------------------------
+
+_PDF_TEXT = """Introduction
+We revisit momentum in equity markets.
+
+Related Work
+Jegadeesh and Titman report a Sharpe ratio of 0.55 for cross-sectional momentum.
+
+Data
+We use CRSP monthly files from 1993 to 2019 for NYSE-listed names.
+
+Results
+Our long-short strategy earns a Sharpe ratio of 1.87.
+
+References
+Some Other Author. 2001. A different paper.
+"""
+
+
+def test_full_text_fills_fields_the_abstract_omits():
+    paper = _paper("We revisit momentum in equity markets.", title="Momentum revisited")
+    thin = alpha.extract(paper)
+    assert thin is not None and thin.testability_score < 2
+
+    rich_card = alpha.extract(paper, full_text=_PDF_TEXT)
+    assert rich_card is not None
+    assert rich_card.from_full_text is True
+    assert rich_card.data_sources == ["CRSP"]
+    assert rich_card.period == "1993-2019"
+    assert rich_card.testability == "strong"
+
+
+def test_effects_are_not_stolen_from_related_work():
+    """The literature review's Sharpe belongs to another paper, not this one."""
+    paper = _paper("We revisit momentum in equity markets.", title="Momentum revisited")
+    card = alpha.extract(paper, full_text=_PDF_TEXT)
+    assert card is not None
+    assert "Sharpe 1.87" in card.effects        # ours, from Results
+    assert "Sharpe 0.55" not in card.effects    # theirs, from Related Work
+
+
+def test_data_sources_still_seen_outside_own_sections():
+    """A dataset named anywhere is evidence the paper uses it."""
+    paper = _paper("An empirical asset pricing study.")
+    card = alpha.extract(
+        paper, full_text="Related Work\nPrior studies rely on Compustat.\n"
+    )
+    assert card is not None and card.data_sources == ["Compustat"]
+
+
+def test_card_without_full_text_is_marked_abstract_only():
+    card = alpha.extract(_paper("Trading returns are predictable."))
+    assert card is not None and card.from_full_text is False
+
+
+def test_own_work_text_strips_others_sections():
+    from paperpulse.fulltext import own_work_text
+
+    kept = own_work_text(_PDF_TEXT)
+    assert "Sharpe ratio of 1.87" in kept          # ours
+    assert "Sharpe ratio of 0.55" not in kept      # related work
+    assert "Some Other Author" not in kept         # references
+    assert "CRSP" in kept                          # data section survives
+    # No headings to act on -> text is returned untouched rather than guessed at.
+    assert own_work_text("plain text with no headings") == "plain text with no headings"
+    assert own_work_text("") == ""
+
+
+def test_universe_is_not_polluted_by_the_whole_pdf():
+    """Words like 'bond' appear in passing in any finance paper; the abstract
+    is what states the paper's actual scope."""
+    paper = _paper(
+        "We study stablecoin delistings on crypto exchanges.",
+        title="Regulation at the gateways",
+    )
+    body = (
+        "Introduction\nWe discuss bond markets, currency carry trades, and the "
+        "S&P 500 in passing while reviewing the literature.\n"
+    )
+    card = alpha.extract(paper, full_text=body)
+    assert card is not None
+    assert card.universe == ["crypto"]  # not fixed income / FX / US equities

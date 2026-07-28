@@ -21,7 +21,10 @@ exercised by you once keys/egress are in place — they fail soft until then.
   never touches ssrn.com directly. `paperpulse run --source ssrn`.
 - ⏳ OpenReview adapter (interface ready — one class)
 - 🟡 Scheduled daily/weekly runs (cron + GitHub Action provided)
-- ⏳ Full-text PDF parsing and table/figure extraction
+- ✅ Full-text PDF parsing (`paperpulse[pdf]`, `--full-text`) — fetched once per
+  paper and shared by trust signals and alpha cards; related-work/reference
+  sections stripped so other papers' numbers aren't attributed to this one
+- ⏳ Table/figure extraction from PDFs
 
 ## Relevance & personalization
 - ✅ Interest profile via embeddings (paragraph and/or seed papers)
@@ -105,7 +108,8 @@ exercised by you once keys/egress are in place — they fail soft until then.
 ## Quant-derived trust signals
 - ✅ Alpha cards (0.2.0) — extract each finance paper's testable claim
   (predictor→target, datasets, effect sizes, universe, period) and rate its
-  testability; `paperpulse alpha`, digest, dashboard, and API
+  testability; `paperpulse alpha`, digest, dashboard, and API. `--full-text`
+  reads the PDF for the datasets and numbers abstracts leave out
 - ✅ Novelty-vs-crowding score (batch embedding similarity)
 - ✅ Subgroup-robustness check
 - ✅ Metric-gaming detector

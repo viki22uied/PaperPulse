@@ -141,6 +141,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         config.use_llm = True
     if args.online:
         config.trust_online = True
+    if args.full_text:
+        config.full_text = True
 
     # Progress goes to stderr so `paperpulse run > digest.md` stays clean.
     err = Console(stderr=True)
@@ -217,6 +219,8 @@ def _cmd_alpha(args: argparse.Namespace) -> int:
     config.alpha_cards = True
     if args.top_n:
         config.top_n = args.top_n
+    if args.full_text:
+        config.full_text = True
 
     err = Console(stderr=True)
     on_stage = (lambda msg: None) if args.quiet else lambda msg: err.print(f"[dim]{msg}[/dim]")
@@ -427,6 +431,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument(
         "--online", action="store_true", help="enable network trust checks"
     )
+    p_run.add_argument(
+        "--full-text",
+        action="store_true",
+        help="read each paper's PDF, not just the abstract (needs paperpulse[pdf])",
+    )
     p_run.add_argument("--include-seen", action="store_true")
     p_run.add_argument("--dry-run", action="store_true")
     p_run.set_defaults(func=_cmd_run)
@@ -505,6 +514,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="only show cards specifying at least this many of "
         "data/effect/universe/period",
+    )
+    p_alpha.add_argument(
+        "--full-text",
+        action="store_true",
+        help="read each paper's PDF for richer cards (needs paperpulse[pdf])",
     )
     p_alpha.add_argument("--quiet", action="store_true", help="hide progress")
     p_alpha.set_defaults(func=_cmd_alpha)

@@ -1,12 +1,19 @@
-"""Best-effort full-text PDF fetch, for trust signals that look past the
-abstract (reproducibility links, dead-link checks). Optional dependency
+"""Best-effort full-text PDF fetch, for signals that look past the abstract
+(reproducibility links, dead-link checks, alpha cards). Optional dependency
 (``pip install paperpulse[pdf]``); fails soft to ``None`` if it's missing, the
 download fails, or the PDF can't be parsed -- callers already treat
-``full_text=None`` as "abstract only"."""
+``full_text=None`` as "abstract only".
+
+Also splits a paper into its own work versus its account of everyone else's.
+That distinction matters: the first "Sharpe ratio of 0.8" in a paper is very
+often in the literature review, describing a *different* paper. Anything that
+attributes numbers to the paper in hand must read :func:`own_work_text`, not the
+raw text."""
 
 from __future__ import annotations
 
 import io
+import re
 import urllib.request
 
 from .models import Paper
@@ -50,4 +57,43 @@ def fetch_full_text(paper: Paper, *, timeout: float = 20.0, max_bytes: int = 20_
         return None
 
 
-__all__ = ["fetch_full_text"]
+# Sections that describe *other people's* results. Numbers quoted here belong to
+# the papers being surveyed, not to this one.
+_OTHERS_WORK = re.compile(
+    r"^\s*(?:\d+\.?\d*\s*|[IVX]+\.?\s*)?"
+    r"(related\s+works?|literature\s+review|prior\s+works?|background|"
+    r"references|bibliography|works?\s+cited)\s*$",
+    re.I | re.M,
+)
+# Any heading at all, used to find where the excluded section ends.
+_HEADING = re.compile(
+    r"^\s*(?:\d+\.?\d*\s*|[IVX]+\.?\s*)?[A-Z][A-Za-z \-]{2,40}\s*$", re.M
+)
+
+
+def own_work_text(text: str) -> str:
+    """``text`` with related-work / literature-review / reference sections cut.
+
+    A section runs from its heading to the next heading. Headings in PDFs are
+    unreliable, so this is deliberately conservative: if the boundary can't be
+    found the section is left in rather than guessing and deleting real
+    results."""
+    if not text:
+        return text
+    spans: list[tuple[int, int]] = []
+    for match in _OTHERS_WORK.finditer(text):
+        next_heading = _HEADING.search(text, match.end())
+        spans.append((match.start(), next_heading.start() if next_heading else len(text)))
+    if not spans:
+        return text
+    kept: list[str] = []
+    cursor = 0
+    for start, end in sorted(spans):
+        if start > cursor:
+            kept.append(text[cursor:start])
+        cursor = max(cursor, end)
+    kept.append(text[cursor:])
+    return "".join(kept)
+
+
+__all__ = ["fetch_full_text", "own_work_text"]

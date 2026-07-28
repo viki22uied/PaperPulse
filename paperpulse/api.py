@@ -316,7 +316,8 @@ function render(papers){
         row("claim", a.claim) + row("reported", a.effects) + row("data", a.data_sources) +
         row("universe", a.universe) + row("period", a.period) +
         (a.missing && a.missing.length
-          ? '<div class="amiss">not stated: '+esc(a.missing.join(", "))+'</div>' : "")+
+          ? '<div class="amiss">not stated '+(a.from_full_text?"in the paper":"in the abstract")+
+            ': '+esc(a.missing.join(", "))+'</div>' : "")+
         '</div>';
     }
     const region = (p.regions||[]).length ? '<div class="meta">Region: '+esc(p.regions.join(", "))+'</div>' : "";
@@ -374,6 +375,7 @@ def _digest_json(config: Config) -> dict:
                     "universe": item.alpha.universe,
                     "period": item.alpha.period,
                     "missing": item.alpha.missing,
+                    "from_full_text": item.alpha.from_full_text,
                 },
                 "trust": None
                 if item.trust is None

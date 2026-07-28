@@ -68,10 +68,29 @@ paperpulse alpha --min-testability 2    # only ones naming real data or numbers
 ```
 
 A **vague** card is the useful part: the paper is about markets but names no
-data, no effect size, no period — there is nothing in the abstract you could go
-replicate, however clean its trust badge. Cards appear in the Markdown digest,
-the dashboard, and `/api/digest`. Deterministic regex, offline, no LLM; papers
-that make no market claim get no card at all.
+data, no effect size, no period — there is nothing you could go replicate,
+however clean its trust badge. Cards appear in the Markdown digest, the
+dashboard, and `/api/digest`. Deterministic regex, offline, no LLM; papers that
+make no market claim get no card at all.
+
+**Reading past the abstract.** Abstracts routinely omit the datasets and
+numbers you need. With the `pdf` extra PaperPulse downloads and reads the paper
+itself:
+
+```bash
+pip install "paperpulse[pdf]"
+paperpulse alpha --full-text        # or: paperpulse run --full-text
+```
+
+On a real paper this moved a card from *vague 1/4* to *partial 2/4*, correctly
+naming Binance and Coinbase as the venues studied. Numbers and claims are only
+ever read from the paper's **own** sections — related-work, literature-review
+and reference sections are stripped first, because the first "Sharpe ratio of
+0.8" in a 40-page PDF is usually a rival paper's result, and a naive scan would
+confidently attribute it here. The card then says *"not stated in the paper"*
+rather than *"not stated in the abstract"*, so a gap means the authors really
+didn't report it. Costs one download and parse per paper, so it's off by
+default and fails soft per paper.
 
 The [sample digest](examples/sample-digest.md) is annotated to show the finance
 paper getting a 🚩 *leakage* flag and the hype paper collecting four flags while a

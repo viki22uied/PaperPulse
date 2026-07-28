@@ -96,7 +96,30 @@ def _literature_reference_texts(topics: list | None) -> list[str]:
     return CANONICAL_FACTOR_PAPERS + [t for t in topic_texts if t]
 
 
-def _attach_trust(config: Config, ranked: list[RankedPaper], backend=None) -> None:
+def _fetch_full_texts(
+    config: Config, ranked: list[RankedPaper]
+) -> dict[str, str]:
+    """Download and parse each paper's PDF once, shared by trust and alpha.
+
+    Needs the ``pdf`` extra; every paper fails soft on its own, so a missing
+    parser or one unreachable PDF degrades that paper to abstract-only rather
+    than failing the digest."""
+    from .fulltext import fetch_full_text
+
+    texts: dict[str, str] = {}
+    for item in ranked:
+        text = fetch_full_text(item.paper)
+        if text:
+            texts[item.paper.id] = text
+    return texts
+
+
+def _attach_trust(
+    config: Config,
+    ranked: list[RankedPaper],
+    backend=None,
+    full_texts: dict[str, str] | None = None,
+) -> None:
     if not config.trust:
         return
     context_base = dict(online=config.trust_online)
@@ -130,11 +153,7 @@ def _attach_trust(config: Config, ranked: list[RankedPaper], backend=None) -> No
         topic_matrix = backend.encode([_topic_text(t) for t in topics])
 
     for item in ranked:
-        full_text = None
-        if config.trust_online:
-            from .fulltext import fetch_full_text
-
-            full_text = fetch_full_text(item.paper)
+        full_text = full_texts.get(item.paper.id) if full_texts else None
 
         # Reuse the vector computed during ranking; fall back to encoding only
         # for callers that construct RankedPapers directly (e.g. tests).
@@ -273,14 +292,21 @@ def run_digest(
         avoid_weight=config.avoid_weight,
     )
 
+    full_texts: dict[str, str] = {}
+    if config.full_text or config.trust_online:
+        stage(f"Fetching full text for {len(ranked)} papers…")
+        full_texts = _fetch_full_texts(config, ranked)
+
     stage(f"Scoring trust for top {len(ranked)}…")
-    _attach_trust(config, ranked, backend=backend)
+    _attach_trust(config, ranked, backend=backend, full_texts=full_texts)
     _attach_regions(config, ranked)
     ranked = _filter_regions(config, ranked)
 
     if config.alpha_cards:
         for item in ranked:
-            item.alpha = alpha_mod.extract(item.paper)
+            item.alpha = alpha_mod.extract(
+                item.paper, full_text=full_texts.get(item.paper.id)
+            )
 
     stage("Summarising…")
     for item in ranked:

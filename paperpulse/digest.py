@@ -67,7 +67,8 @@ def _alpha_block(item: RankedPaper) -> list[str]:
     if card.period:
         lines.append(f"- *Period* — {card.period}")
     if card.missing:
-        lines.append(f"- *Not stated* — {', '.join(card.missing)}")
+        scope = "in the paper" if card.from_full_text else "in the abstract"
+        lines.append(f"- *Not stated {scope}* — {', '.join(card.missing)}")
     lines.append("")
     return lines
 

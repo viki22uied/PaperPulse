@@ -67,7 +67,8 @@ EFFECT_PATTERNS = {
 UNIVERSE_PATTERNS = {
     "US equities": r"\b(?:US|U\.S\.|American)\s+(?:stock|equit|share)|NYSE|NASDAQ|S&P\s*500|Russell\s*\d+",
     "global equities": r"\b(?:international|global|cross[- ]countr|world)\s+(?:stock|equit|market)",
-    "crypto": r"\b(?:crypto(?:currenc)?|bitcoin|ethereum|digital asset)",
+    "crypto": r"\b(?:crypto(?:currenc)?|bitcoin|ethereum|digital asset|"
+              r"stablecoin|USDT|USDC|perpetual (?:swap|future)|DeFi)",
     "FX": r"\b(?:foreign exchange|currency|FX)\s+(?:market|rate|carry)?",
     "fixed income": r"\b(?:bond|treasur|fixed[- ]income|credit spread|yield curve)",
     "commodities": r"\b(?:commodit|futures\s+market|crude oil|gold)",
@@ -93,7 +94,9 @@ _PREDICTS = re.compile(
 _FINANCE_HINT = re.compile(
     r"\b(return|portfolio|asset|market|trading|price|volatilit|risk premi|"
     r"investor|stock|equit|hedg|alpha|factor|yield|financ|econom|credit|"
-    r"bank|capital|liquidit|systemic risk|bubble|monetary|inflation)", re.I
+    r"bank|capital|liquidit|systemic risk|bubble|monetary|inflation|"
+    r"arbitrage|derivativ|option|futures|microstructure|order flow|"
+    r"sharpe|backtest|valuation|dividend)", re.I
 )
 
 
@@ -106,6 +109,9 @@ class AlphaCard:
     effects: list[str] = field(default_factory=list)  # ["Sharpe 1.82", "t-stat 3.10"]
     universe: list[str] = field(default_factory=list)
     period: str = ""                                  # "1990-2020"
+    # True when the card read the PDF, not just the abstract -- a missing field
+    # then means "the paper doesn't say", not "the abstract didn't mention it".
+    from_full_text: bool = False
 
     @property
     def testability(self) -> str:
@@ -149,6 +155,13 @@ def _find_effects(text: str) -> list[str]:
     return found
 
 
+def _find_universe(text: str) -> list[str]:
+    return [
+        name for name, pattern in UNIVERSE_PATTERNS.items()
+        if re.search(pattern, text, re.I)
+    ]
+
+
 def _find_claim(text: str) -> str:
     match = _PREDICTS.search(text)
     if not match:
@@ -160,35 +173,58 @@ def _find_claim(text: str) -> str:
 
 
 def extract(paper: Paper, *, full_text: str | None = None) -> AlphaCard | None:
-    """Build an :class:`AlphaCard` from a paper's abstract (plus full text if
-    you have it).
+    """Build an :class:`AlphaCard` from a paper's abstract, and its PDF text if
+    you have it (see :func:`paperpulse.fulltext.fetch_full_text`).
 
     Returns ``None`` when the paper isn't making a market claim at all -- there
     is no alpha to card. A *vague* card is a different and useful answer: the
     paper is about markets but names no data, effect size, universe, or period,
-    so there is nothing in the abstract you could go replicate."""
-    text = f"{paper.title}. {paper.abstract}" + (f" {full_text}" if full_text else "")
-    if not _FINANCE_HINT.search(text):
+    so there is nothing you could go replicate.
+
+    Numbers and claims are only ever read from the paper's *own* sections: the
+    abstract plus full text with related-work, literature-review and reference
+    sections removed. Without that, the first "Sharpe ratio of 0.8" in a
+    40-page PDF is usually a rival paper's result being quoted, and the card
+    would confidently attribute it here. Dataset and universe mentions are read
+    from everything, since naming CRSP anywhere is evidence the paper uses it."""
+    abstract = f"{paper.title}. {paper.abstract}"
+    if full_text:
+        from .fulltext import own_work_text
+
+        # Attribution-safe: this paper's own claims and numbers.
+        claim_text = f"{abstract} {own_work_text(full_text)}"
+        # Attribution-agnostic: what data/markets are in play.
+        mention_text = f"{abstract} {full_text}"
+    else:
+        claim_text = mention_text = abstract
+
+    if not _FINANCE_HINT.search(mention_text):
         return None
 
     period = ""
-    match = _PERIOD.search(text)
+    match = _PERIOD.search(claim_text)
     if match:
         start, end = match.group(1), match.group(2)
         if int(end) > int(start):  # "2020-2019" is a typo, not a sample window
             period = f"{start}-{end}"
 
+    # Universe comes from the abstract only, which states what the paper is
+    # actually about. Scanning a whole PDF for it is worse than useless: words
+    # like "bond" or "currency" turn up in passing in almost any finance paper,
+    # so a crypto-regulation study comes back claiming to cover four asset
+    # classes. If the abstract names no market, "not stated" is the honest
+    # answer -- unlike datasets and effect sizes, which the body reports
+    # precisely and abstracts routinely omit.
     return AlphaCard(
-        claim=_find_claim(text),
+        claim=_find_claim(claim_text),
         data_sources=[
-            name for name, pattern in DATA_SOURCES.items() if re.search(pattern, text, re.I)
+            name for name, pattern in DATA_SOURCES.items()
+            if re.search(pattern, mention_text, re.I)
         ],
-        effects=_find_effects(text),
-        universe=[
-            name for name, pattern in UNIVERSE_PATTERNS.items()
-            if re.search(pattern, text, re.I)
-        ],
+        effects=_find_effects(claim_text),
+        universe=_find_universe(abstract),
         period=period,
+        from_full_text=bool(full_text),
     )
 
 
@@ -203,6 +239,7 @@ if __name__ == "__main__":  # smoke check
         ),
     )
     card = extract(strong)
+    assert card is not None
     assert card.testability == "strong", card
     assert "CRSP" in card.data_sources and "Compustat" in card.data_sources
     assert card.period == "1990-2020"

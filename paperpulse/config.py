@@ -41,6 +41,12 @@ class Config:
     # would actually take. Offline regex; no effect on non-finance papers.
     alpha_cards: bool = True
 
+    # Download each paper's PDF and read past the abstract (needs the `pdf`
+    # extra: pip install paperpulse[pdf]). Much richer alpha cards and trust
+    # signals, at one HTTP request and a parse per paper -- so it is off by
+    # default. Fails soft per paper: an unreachable PDF just means abstract-only.
+    full_text: bool = False
+
     # Trust signals
     trust: bool = True
     trust_signals: list[str] | None = None  # None => library defaults
