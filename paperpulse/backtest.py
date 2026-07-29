@@ -188,7 +188,20 @@ def run_demo(card: AlphaCard | None = None) -> BacktestDemo:
     with tempfile.TemporaryDirectory() as tmp:
         csv_path = str(Path(tmp) / "synthetic_chain.csv")
         _write_synthetic_csv(csv_path)
-        data = op.csv_data(csv_path, **_COLUMNS)
+        # Explicit kwargs, not **_COLUMNS: csv_data's real signature mixes int
+        # column-index params with str|None date params, which mypy can't
+        # verify against a plain dict[str, int] unpacked with **.
+        data = op.csv_data(
+            csv_path,
+            underlying_symbol=_COLUMNS["underlying_symbol"],
+            option_type=_COLUMNS["option_type"],
+            expiration=_COLUMNS["expiration"],
+            quote_date=_COLUMNS["quote_date"],
+            strike=_COLUMNS["strike"],
+            bid=_COLUMNS["bid"],
+            ask=_COLUMNS["ask"],
+            delta=_COLUMNS["delta"],
+        )
 
         # Iron condor: the canonical multi-leg strategy, one delta target per
         # leg -- the clearest illustration of how optopsy actually selects
