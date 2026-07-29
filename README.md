@@ -5,288 +5,105 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**The five papers that actually matter to you today — ranked, trust-scored, and summarised in plain English.**
+**Every day, arXiv posts hundreds of new papers. PaperPulse picks the five that actually matter to you, tells you whether to trust them, and explains why — all in plain English.**
 
 📄 **[See a real digest generated today →](examples/2026-07-14.md)** &nbsp;·&nbsp;
 🗺️ **[Roadmap](ROADMAP.md)** &nbsp;·&nbsp;
-🧪 **[Annotated sample](examples/sample-digest.md)**
+🧪 **[Annotated example](examples/sample-digest.md)**
 
-arXiv drops hundreds of papers a day. Summaries are a solved problem; *triage*
-isn't. PaperPulse is built around the two questions that actually waste your
-time:
+## What it actually does
 
-1. **Which of today's 200 papers are relevant to *me*?** — a learnable interest
-   profile ranks every abstract by similarity to what you care about, a
-   thumbs-up/down feedback loop sharpens it over time, and `avoid_topics` ranks
-   down factors you've already worked to death — even before any feedback.
-2. **Which of those should I actually trust?** — a set of offline *signal-quality*
-   heuristics flag over-claiming, missing error bars, weak baselines, likely data
-   leakage, benchmark-chasing, weak/null results, and incremental "me-too" work,
-   before you sink twenty minutes into the PDF.
-3. **Have I already been down this road?** — a shared known-factor /
-   already-tried log flags papers matching something you (or the literature)
-   already found dead, weak, or crowded — and green-lights the same factor in
-   a region you haven't tested yet.
+1. **Ranks papers by what you care about.** You describe your interests in a sentence. PaperPulse ranks today's papers against that, and gets smarter every time you say "more like this" / "less like this."
+2. **Flags papers that look shaky.** No error bars, no code, hyped-up language, results that only hold on one dataset — PaperPulse scans for the patterns that usually mean weaker work, and shows you exactly which words triggered the flag.
+3. **Remembers what you've already ruled out.** Log a topic as "dead end, already tried" once, and PaperPulse will flag it every time it resurfaces — even in a different country's market or a different dataset.
 
-It runs out of the box with **no API keys and no model downloads** (local hashing
-embeddings + extractive summaries), and scales up cleanly to semantic embeddings
-and LLM summaries when you want them.
+No API keys, no paid services, no sign-up. It works offline out of the box.
 
 ```bash
-pip install paperpulse    # or: pip install -e .  (from a clone)
-paperpulse init           # interactive wizard; or --preset finance|econ|ml|bio
-paperpulse run            # today's ranked, trust-scored digest -> digests/YYYY-MM-DD.md
+pip install paperpulse
+paperpulse init      # 30-second setup wizard
+paperpulse run       # today's digest -> digests/YYYY-MM-DD.md
 ```
 
-> **New in 0.2.0:** `init` is now a short interactive wizard (pick a topic
-> pack, describe your interests — or skip it with `--preset`), `run` shows
-> live progress instead of sitting silent, and failures print a one-line
-> explanation instead of a traceback (`--debug` for the full one). Finance
-> papers now also get an **alpha card** — see below.
+## Finance papers get an extra "alpha card"
 
-### Alpha cards
+If a paper claims to find a trading edge, PaperPulse pulls out the specifics: what it's predicting, what data it used, what numbers it reported, and over what time period. A card can be:
 
-Relevance says a paper is in your area; the trust badge says whether to believe
-it. Neither answers what a systematic researcher asks next: *is there something
-implementable here, and what would testing it cost me?*
-
-For finance and economics papers PaperPulse extracts the **testable claim** from
-the abstract — the predictor and what it supposedly predicts, the datasets
-named, the reported effect sizes, the sample universe and period — then rates
-how much of that is actually specified:
+- **Strong** — data, numbers, and dates are all there. You could try to reproduce it.
+- **Vague** — the paper talks about markets but gives you nothing to check. This is the important case: it looks credible until you notice there's nothing underneath.
 
 ```bash
-paperpulse alpha                        # today's papers as alpha cards
-paperpulse alpha --min-testability 2    # only ones naming real data or numbers
+paperpulse alpha                       # today's papers as alpha cards
+paperpulse alpha --full-text           # also reads the actual PDF, not just the abstract (needs: pip install "paperpulse[pdf]")
 ```
 
-```
-│ Idiosyncratic volatility and │ strong 4/4  │ Sharpe 1.24, │ CRSP,     │ 1990-2020 │
-│ the cross-section of returns │             │ t-stat 3.80  │ Compustat │           │
-│ The Quarter-Hour Effect in   │ partial 2/4 │ —            │ Binance   │ —         │
-│ A deep learning approach to  │ vague 0/4   │ —            │ —         │ —         │
-```
+### The options-backtest demo — read this before you install it
 
-A **vague** card is the useful part: the paper is about markets but names no
-data, no effect size, no period — there is nothing you could go replicate,
-however clean its trust badge. Cards appear in the Markdown digest, the
-dashboard, and `/api/digest`. Deterministic regex, offline, no LLM; papers that
-make no market claim get no card at all.
+`paperpulse backtest` is a **teaching tool, not a trading tool.** It runs a real backtesting engine ([optopsy](https://github.com/goldspanlabs/optopsy)) on made-up, synthetic data, so you can see how an options strategy is actually tested — how strikes get picked, what a win/loss report looks like, why even a "good" strategy loses money sometimes.
 
-**Reading past the abstract.** Abstracts routinely omit the datasets and
-numbers you need. With the `pdf` extra PaperPulse downloads and reads the paper
-itself:
+It does **not**:
+- verify whether any paper's claim is true
+- use real market data
+- connect to a broker or place any trade
+- give you financial advice of any kind
+
+Think of it as a flight simulator for reading finance papers, not an autopilot. It's an optional extra (`pip install "paperpulse[backtest]"`, needs Python 3.12+) — it's off by default and the rest of PaperPulse doesn't need it.
+
+## Using it
 
 ```bash
-pip install "paperpulse[pdf]"
-paperpulse alpha --full-text        # or: paperpulse run --full-text
-```
+# Command line
+paperpulse run --categories cs.LG cs.CL
 
-On a real paper this moved a card from *vague 1/4* to *partial 2/4*, correctly
-naming Binance and Coinbase as the venues studied. Numbers and claims are only
-ever read from the paper's **own** sections — related-work, literature-review
-and reference sections are stripped first, because the first "Sharpe ratio of
-0.8" in a 40-page PDF is usually a rival paper's result, and a naive scan would
-confidently attribute it here. The card then says *"not stated in the paper"*
-rather than *"not stated in the abstract"*, so a gap means the authors really
-didn't report it. Costs one download and parse per paper, so it's off by
-default and fails soft per paper.
-
-**Seeing the mechanics.** An alpha card tells you a paper claims something
-about options markets; it can't tell you whether the claim survives real
-money — that needs the paper's own data and a real backtest engine, not a
-regex. What it *can* do is teach how a real backtest actually works:
-
-```bash
-pip install "paperpulse[backtest]"   # needs Python 3.12+; installs optopsy (AGPL-3.0)
-paperpulse backtest                  # or: paperpulse backtest <arxiv-id> for a card's context
-```
-
-This runs [optopsy](https://github.com/goldspanlabs/optopsy), a real
-options-backtesting engine, on a small **synthetic** SPX-shaped chain — how an
-iron condor's four legs get picked by delta, what a backtest actually reports
-(P&L distribution, win rate, profit factor), and, deliberately, what a losing
-trade looks like: an earlier version of this demo used flat synthetic data and
-every trade won, which taught the wrong lesson entirely. It doesn't verify any
-paper's claim — optopsy needs a real historical chain for that (commercial
-data; the project's own docs point at EODHD) — so this is explicitly a "how
-does this work" tool, not a "does this hold" one. It's the one AGPL dependency
-in an otherwise permissively-licensed project, which is why it's an isolated
-opt-in extra rather than bundled into `paperpulse[all]`.
-
-The [sample digest](examples/sample-digest.md) is annotated to show the finance
-paper getting a 🚩 *leakage* flag and the hype paper collecting four flags while a
-careful LoRA study rises to the top.
-
----
-
-## Why it's not just another arXiv scraper
-
-| | Typical "arXiv + LLM" script | PaperPulse |
-|---|---|---|
-| Ranking | none / recency | learnable interest vector + **MMR diversity** + `avoid_topics` |
-| Personalisation | static keywords | **Rocchio feedback loop**, per-user profiles |
-| Trust | blind trust in the summary | **15+ signal-quality checks** with a badge |
-| Novelty | — | **crowding score** + **known/already-tried factor log** flag incremental or dead-end work |
-| Cost to start | API key required | **runs fully offline** |
-
-## How the ranking works
-
-1. **Embed** each abstract into a stable vector space. The default
-   `HashingBackend` needs no model and no training, so a profile learned today is
-   still comparable next week. Install `paperpulse[semantic]` to switch to
-   sentence-transformers for sharper semantics — same interface, better vectors.
-2. **Score** by cosine similarity to your interest vector, minus a weighted
-   pull away from anything in `avoid_topics` — factor names you're already
-   sick of, seeded in bulk with `paperpulse init --seed-avoid factors.txt`.
-3. **Select** the top *N* with **Maximal Marginal Relevance**, trading a little
-   relevance for variety so you don't get five near-identical papers.
-4. **Learn.** `paperpulse feedback --like 2407.00004 --dislike 2407.00002`
-   nudges the profile toward what you liked and away from what you didn't
-   (Rocchio), anchored so it never drifts far from the interests you wrote down.
-   Add `--reason crowded|weak-result|already-tried` and the dislike also gets
-   logged to the known-topics store below, instead of only nudging a vector.
-
-## The trust layer
-
-Working from a title and abstract we can't *prove* a paper is sound — but we can
-cheaply flag the patterns that correlate with weaker work. Each signal is
-deterministic, explains itself, and rolls up into a 🟢 clean / 🟡 mixed /
-🔴 caution badge. Any hard red flag keeps a paper out of "clean".
-
-Every flag is **legible**: it shows the *exact phrase that tripped it* and a
-*confidence* so you can dismiss weak heuristics at a glance, not just a colour.
-A **peer-review / venue** signal separates published or venue-accepted work from
-preprint-only (and flags papers that have sat on arXiv for years, still v1, with
-no venue). Each paper also carries a **worth-it** score — relevance × trust — to
-answer "is this worth my next 30 minutes?"
-
-Several are drawn straight from systematic-trading research discipline:
-
-- **crowding / novelty** — is the method a cosmetic rehash of neighbours in the same batch?
-- **literature novelty** — is it a rehash of a well-known factor (Fama-French, Carhart,
-  momentum, betting-against-beta, quality-minus-junk, gross profitability, low-vol),
-  independent of what else arrived today?
-- **known/already-tried factor** — does it match something logged as dead, weak, or
-  merely a known factor family in your shared topics log? (see below)
-- **weak/null result** — does the abstract or full text actually say "no significant
-  improvement", "inconclusive", "fails to replicate" — separate from methodology quality
-- **subgroup robustness** — do strong aggregate numbers hide weak subgroups?
-- **metric gaming** — did a metric move without a genuine underlying gain?
-- **deployability** — oracle inputs, look-ahead features, or unrealistic compute?
-- **leakage** — random splits on time-series/financial data (a classic lookahead trap)
-- **backtest overfitting, survivorship bias, transaction-cost omission, single-market/period**
-  — a backtest with no out-of-sample check, no mention of delisted firms, no costs, or
-  tested on only one market/window
-- **baseline fairness**, **evidence / error bars**, **over-claiming**, **benchmark saturation**, **reproducibility (code/data links)**
-
-Turn on `--online` (or `trust_online: true`) to add **dead-link detection**, a
-**Retraction Watch** cross-check, a **self-citation ratio** (via Semantic
-Scholar — set `S2_API_KEY` for higher rate limits), a **citation-graph gap**
-check (thin reference lists), and optional **full-text PDF parsing**
-(`pip install paperpulse[pdf]`) so several of the above can read past the abstract.
-
-## Region tagging and the known/already-tried factor log
-
-Every digest entry gets a keyword-detected **region tag** (USA / EUR / CHN / IND /
-Global-Unspecified) from index and market names in the abstract, and you can
-filter to specific regions with `region_filter` in config.
-
-A shared SQLite log (`topics_db`) tracks factor families you or the literature
-already know about:
-
-```bash
-paperpulse factors add "board diversity" --aliases "board gender diversity" \
-  --source manual --result dead --notes "tried 6 variants, no edge"
-paperpulse factors list
-paperpulse factors check   # today's digest, but only "new evidence" on tracked dead/weak factors
-```
-
-A paper matching a `dead`/`weak` entry gets a hard 🔴 flag with your own notes
-attached; a `promising` entry surfaces as a positive note instead of a caution.
-If `already_tested_regions` says you've only tested a factor in the USA, the
-same factor showing up in a paper about India gets a green "untested region —
-may still be valid to explore" note rather than being suppressed.
-
-## Beyond the digest
-
-- **Multiple sources** — arXiv, bioRxiv/medRxiv, PubMed, and SSRN (via OpenAlex, not a
-  direct scraper) behind one interface (`paperpulse run --source ssrn`). Adding
-  OpenReview is one adapter.
-- **Contradiction mapping** — surfaces pairs of closely-related papers that report opposing outcomes.
-- **Cross-reference your own work** — `paperpulse similar my_model.py` finds papers whose methods are functionally closest to your code or notebook.
-- **Market context for finance papers** — when a paper names a well-known asset (an index, crypto, commodity, or mega-cap), the dashboard tags it with the latest price from Yahoo Finance so you can sanity-check a claim at a glance. Stdlib-only, no API key.
-- **Per-paper notes** — `paperpulse note <id> "text"` keeps a running annotation log per paper (needs `community_db`).
-- **Delivery anywhere** — Markdown file, email (SMTP), RSS feed, or Slack/Discord webhook.
-- **Community trust store** — a self-hostable SQLite DB that pools trust reports across users and builds an over-claiming leaderboard.
-- **Dashboard filter presets** — one-click "Region: USA only", "Known factor families only",
-  "Untested regions only" in the web dashboard.
-
-## Three ways to use it
-
-```bash
-# 1. CLI
-paperpulse run --source arxiv --categories cs.LG cs.CL
-
-# 2. Python SDK
+# As a Python library
 python -c "from paperpulse.pipeline import run_digest; from paperpulse.config import Config; \
            print(run_digest(Config(), dry_run=True).markdown)"
 
-# 3. REST API + web dashboard (stdlib only, no extra deps)
-paperpulse serve            # http://127.0.0.1:8000
-#   Interactive topic-filter bar (Finance / Economics / Quant), loads instantly,
-#   with live price chips on any paper that names a major asset. The "⚙ Setup"
-#   panel is the browser equivalent of `paperpulse init` -- pick a topic pack
-#   or write your own interests text, which persists to paperpulse.yaml and
-#   actually drives ranking (the filter chips alone only choose which arXiv
-#   categories get fetched). LaTeX in abstracts renders as real math (KaTeX).
-#   GET /api/digest?cats=q-fin.TR,econ.GN   GET/POST /api/config
-#   POST /api/feedback   GET /api/community/leaderboard
+# Web dashboard (built in, no extra install)
+paperpulse serve            # open http://127.0.0.1:8000
 ```
 
-Or with Docker:
+The dashboard has clickable topic filters, a settings panel to change what you're tracking without touching a config file, and renders any math in an abstract properly instead of showing raw symbols.
 
-```bash
-docker compose up          # dashboard on :8000, state persisted in a volume
-```
+Or with Docker: `docker compose up`
+
+## Why not just ask an LLM to summarize arXiv?
+
+| | Typical "arXiv + LLM" script | PaperPulse |
+|---|---|---|
+| Ranking | Newest first | Ranked by *your* interests, and gets better as you give feedback |
+| Trust | Trusts whatever the summary says | 15+ automated checks for weak/shaky work, each one explained |
+| Memory | None — sees the same thing every day | Remembers what you've already ruled out |
+| Cost | Needs an API key | Runs fully offline for free |
+
+## More features
+
+- **Multiple sources** — arXiv, bioRxiv, medRxiv, PubMed, SSRN
+- **Finds contradictions** — flags pairs of recent papers that disagree with each other
+- **Compares to your own code** — `paperpulse similar my_model.py` finds papers closest to what you're already working on
+- **Live prices for finance papers** — if a paper mentions the S&P 500, Bitcoin, etc., the dashboard shows the current price next to it (no API key needed)
+- **Notes** — jot down your own thoughts against any paper and keep them
+- **Delivery** — save to a file, email, RSS feed, or post to Slack/Discord
+- **Shared trust database** — a team can pool their trust scores in one place
 
 ## Configuration
 
-`paperpulse init` writes a commented `paperpulse.yaml`
-(see [`paperpulse.example.yaml`](paperpulse.example.yaml)). Everything is
-config-driven: sources, categories, which trust signals to enable, ranking
-diversity, delivery, `avoid_topics`, `region_filter`, and `topics_db`.
+`paperpulse init` writes a `paperpulse.yaml` you can edit by hand — see [`paperpulse.example.yaml`](paperpulse.example.yaml) for every option, commented.
 
-Secrets are read from the environment, never the config file:
-`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (LLM summaries), `PAPERPULSE_SMTP_*`
-(email), `PAPERPULSE_SLACK_WEBHOOK` / `PAPERPULSE_DISCORD_WEBHOOK`, `NCBI_API_KEY`,
-and `PAPERPULSE_API_TOKEN` (when set, dashboard/API POSTs require it as a
-Bearer token — set this if you expose `paperpulse serve` beyond localhost).
+API keys and passwords always go in environment variables, never in the config file: `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (only needed if you want AI-written summaries instead of the free built-in ones), `PAPERPULSE_SMTP_*` (email), `PAPERPULSE_SLACK_WEBHOOK` / `PAPERPULSE_DISCORD_WEBHOOK`, `NCBI_API_KEY`, `PAPERPULSE_API_TOKEN` (protects the dashboard if you put it on a shared server).
 
 ## Scheduling
 
-Run it daily with cron, or use the included GitHub Action
-([`.github/workflows/digest.yml`](.github/workflows/digest.yml)) to generate and
-commit a digest every weekday morning.
+Run it daily with cron, or use the included GitHub Action to generate and commit a digest every weekday morning ([`.github/workflows/digest.yml`](.github/workflows/digest.yml)).
 
-## Development
+## Contributing
 
 ```bash
 pip install -e ".[dev]"
 pytest
 ```
 
-The full test suite is offline — no network, no keys — so it runs anywhere.
-
-See [`ROADMAP.md`](ROADMAP.md) for what's shipped and what's next.
-
-### Publishing
-
-`pip install build twine && python -m build && twine check dist/*` builds and
-validates the wheel. Cutting a **GitHub Release** then publishes it to PyPI via
-[`release.yml`](.github/workflows/release.yml) (Trusted Publishing — no token in
-the repo; add the publisher once on PyPI first). Or push manually with
-`twine upload dist/*`.
+Tests run fully offline — no network, no API keys required. See [`ROADMAP.md`](ROADMAP.md) for what's built and what's planned.
 
 ## License
 

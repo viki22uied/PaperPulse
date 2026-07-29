@@ -5,17 +5,24 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "paperpulse"
 dynamic = ["version"]  # single source of truth: paperpulse/__init__.py
-description = "Relevance-ranked arXiv digests: the few papers that actually matter to you, summarised."
+description = "Relevance-ranked, trust-scored arXiv digests for quant finance and research: alpha cards, a LaTeX-rendered dashboard, and an options-backtest demo."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "viki22uied" }]
-keywords = ["arxiv", "research", "digest", "nlp", "embeddings", "recommender"]
+keywords = [
+    "arxiv", "research", "digest", "nlp", "embeddings", "recommender",
+    "quant-finance", "finance", "econometrics", "backtesting", "options-trading",
+    "trust-score", "paper-triage",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Linguistic",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Office/Business :: Financial :: Investment",
 ]
 dependencies = [
     "numpy>=1.23,<3",
