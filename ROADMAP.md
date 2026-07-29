@@ -174,6 +174,12 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - 🟡 Email delivery (SMTP)
 - ✅ RSS feed output
 - ✅ Simple web dashboard + REST API (stdlib, self-hostable)
+- ✅ Browser setup panel (GET/POST `/api/config`) — the dashboard equivalent
+  of `paperpulse init`: pick a topic pack or write your own interests text,
+  persisted to `paperpulse.yaml`. Previously CLI-only; the filter chips alone
+  only chose which arXiv categories to fetch, not what drives ranking
+- ✅ LaTeX in abstracts/claims renders as real math (KaTeX) instead of raw
+  markup — including bare `\begin{equation*}` blocks with no `$`/`\[` wrapper
 - 🟡 Slack / Discord delivery (incoming webhooks)
 
 ## Community / social layer

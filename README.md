@@ -235,8 +235,13 @@ python -c "from paperpulse.pipeline import run_digest; from paperpulse.config im
 # 3. REST API + web dashboard (stdlib only, no extra deps)
 paperpulse serve            # http://127.0.0.1:8000
 #   Interactive topic-filter bar (Finance / Economics / Quant), loads instantly,
-#   with live price chips on any paper that names a major asset.
-#   GET /api/digest?cats=q-fin.TR,econ.GN   POST /api/feedback   GET /api/community/leaderboard
+#   with live price chips on any paper that names a major asset. The "⚙ Setup"
+#   panel is the browser equivalent of `paperpulse init` -- pick a topic pack
+#   or write your own interests text, which persists to paperpulse.yaml and
+#   actually drives ranking (the filter chips alone only choose which arXiv
+#   categories get fetched). LaTeX in abstracts renders as real math (KaTeX).
+#   GET /api/digest?cats=q-fin.TR,econ.GN   GET/POST /api/config
+#   POST /api/feedback   GET /api/community/leaderboard
 ```
 
 Or with Docker:

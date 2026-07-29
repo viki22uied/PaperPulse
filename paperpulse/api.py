@@ -28,6 +28,7 @@ from typing import Any, Callable, cast
 from urllib.parse import parse_qs, urlparse
 
 from . import market
+from .cli import TOPIC_PACKS, build_init_config
 from .config import Config
 from .pipeline import DiffResult, DigestResult, apply_feedback, diff_digest, run_digest
 from .sources import available
@@ -162,8 +163,16 @@ _SHELL = """<!doctype html>
  .spin{display:inline-block;width:1.1rem;height:1.1rem;border:2px solid var(--line);
    border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-.2rem;margin-right:.4rem}
  @keyframes sp{to{transform:rotate(360deg)}}
+ .setup textarea{width:100%;min-height:4.5rem;font:inherit;background:transparent;color:var(--fg);
+   border:1px solid var(--line);border-radius:8px;padding:.5rem;box-sizing:border-box}
+ .setup select{font:inherit;background:var(--chip);color:var(--chipfg);border:1px solid var(--line);
+   border-radius:8px;padding:.35rem .5rem}
+ .setup label{display:block;font-size:.8rem;color:var(--muted);margin:.6rem 0 .3rem}
+ .setupToggle{font-size:.8rem;color:var(--muted);cursor:pointer;text-decoration:underline;margin-bottom:.6rem;display:inline-block}
 </style></head><body>
 <h1>PaperPulse</h1><div class="sub">__SUBTITLE__ · today's ranked, trust-scored papers</div>
+<span class="setupToggle" id="setupToggle">⚙ Setup (topics + interests)</span>
+<div class="filter setup" id="setup" style="display:none"></div>
 <div class="filter" id="filter"></div>
 <div id="results"><div class="status">Pick topics and press <b>Run</b>.</div></div>
 <script>
@@ -374,6 +383,62 @@ function typesetMath(el){
     });
   }
 }
+let PACKS = {};
+async function initSetup(){
+  const panel = document.getElementById("setup");
+  try{
+    const r = await fetch("/api/config");
+    const cfg = await r.json();
+    PACKS = cfg.packs || {};
+    panel.innerHTML =
+      '<label for="setupPack">Topic pack</label>'+
+      '<select id="setupPack"><option value="">-- custom --</option>'+
+      Object.keys(PACKS).map(name => '<option value="'+esc(name)+'">'+esc(name)+'</option>').join("")+
+      '</select>'+
+      '<label for="setupInterests">Interests (drives ranking within your fetched categories)</label>'+
+      '<textarea id="setupInterests">'+esc(cfg.interests||"")+'</textarea>'+
+      '<div class="actions"><button class="btn primary" id="setupSave">Save</button>'+
+      '<span class="meta" id="setupStatus"></span></div>';
+    document.getElementById("setupPack").onchange = (e) => {
+      const pack = PACKS[e.target.value];
+      if(pack) document.getElementById("setupInterests").value = pack.interests;
+    };
+    document.getElementById("setupSave").onclick = async () => {
+      const status = document.getElementById("setupStatus");
+      const packName = document.getElementById("setupPack").value;
+      const interests = document.getElementById("setupInterests").value;
+      const payload = {interests};
+      if(packName) payload.preset = packName;
+      status.textContent = "Saving…";
+      try{
+        const resp = await fetch("/api/config", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload),
+        });
+        const out = await resp.json();
+        if(!resp.ok) throw new Error(out.error || ("HTTP "+resp.status));
+        status.textContent = "Saved -- press Run to see it reflected.";
+        if(out.categories){
+          selected = new Set(out.categories.flatMap(c =>
+            c.endsWith(".*") ? Object.values(CATALOG).flat().map(([cat])=>cat).filter(cat=>cat.startsWith(c.slice(0,-1)))
+                              : [c]));
+          renderFilter();
+        }
+      }catch(e){
+        status.textContent = "Couldn't save: "+e.message;
+      }
+    };
+  }catch(e){
+    panel.innerHTML = '<div class="status">Couldn\\'t load current config.</div>';
+  }
+}
+document.getElementById("setupToggle").onclick = () => {
+  const panel = document.getElementById("setup");
+  const show = panel.style.display === "none";
+  panel.style.display = show ? "block" : "none";
+  if(show && !panel.innerHTML) initSetup();
+};
 renderFilter();
 load();
 </script>
@@ -471,7 +536,7 @@ def _diff_json(config: Config) -> dict:
     }
 
 
-def make_handler(config: Config):
+def make_handler(config: Config, config_path=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):  # keep the console quiet
             pass
@@ -501,6 +566,17 @@ def make_handler(config: Config):
                 cats = _parse_cats(urlparse(self.path).query)
                 cfg = replace(config, categories=cats) if cats else config
                 self._json(_diff_json(cfg))
+            elif path == "/api/config":
+                # The browser-side equivalent of `paperpulse init`: what the
+                # topic-filter chips can't do, since they only choose which
+                # arXiv categories to fetch -- interests text drives ranking
+                # within them, and until now only the CLI wizard could set it.
+                self._json({
+                    "categories": config.categories,
+                    "interests": config.interests,
+                    "packs": {name: {"categories": cats, "interests": interests}
+                              for name, (cats, interests) in TOPIC_PACKS.items()},
+                })
             elif path == "/api/community/leaderboard":
                 if not config.community_db:
                     self._json({"error": "community_db not configured"}, 400)
@@ -531,6 +607,8 @@ def make_handler(config: Config):
                 self._json({"error": "not found"}, 404)
 
         def do_POST(self) -> None:
+            nonlocal config  # /api/config may reassign it; declared up front
+            # for mypy's flow analysis of the later branches, not just this one.
             # Opt-in write protection: when PAPERPULSE_API_TOKEN is set (e.g.
             # for a network-exposed instance), POSTs must carry it as a Bearer
             # token. Unset = open, the localhost default.
@@ -548,7 +626,36 @@ def make_handler(config: Config):
             except json.JSONDecodeError:
                 self._json({"error": "invalid JSON"}, 400)
                 return
-            if path == "/api/feedback":
+            if path == "/api/config":
+                preset = body.get("preset") or None
+                if preset is not None and preset not in TOPIC_PACKS:
+                    self._json({"error": f"unknown preset {preset!r}"}, 400)
+                    return
+                categories = body.get("categories") or None
+                interests = body.get("interests") or None
+                if preset is None and not categories and not interests:
+                    self._json({"error": "nothing to update"}, 400)
+                    return
+                if preset is not None:
+                    updated = build_init_config(preset, interests=interests, categories=categories)
+                    # Preserve every other setting (trust, alpha_cards, source,
+                    # etc.) instead of resetting to library defaults.
+                    config = replace(
+                        config, categories=updated.categories, interests=updated.interests
+                    )
+                else:
+                    config = replace(
+                        config,
+                        categories=categories or config.categories,
+                        interests=interests or config.interests,
+                    )
+                config.save(config_path)
+                # dict.clear() is safe without _key_locks_guard here (it only
+                # protects handing out per-key locks); worst case under a race
+                # is one redundant re-fetch, not corruption.
+                _digest_cache.clear()
+                self._json({"ok": True, "categories": config.categories, "interests": config.interests})
+            elif path == "/api/feedback":
                 profile = apply_feedback(
                     config,
                     list(body.get("like", [])),
@@ -581,7 +688,7 @@ def make_handler(config: Config):
 
 def serve(*, host: str = "127.0.0.1", port: int = 8000, config_path=None) -> None:
     config = Config.load(config_path)
-    server = ThreadingHTTPServer((host, port), make_handler(config))
+    server = ThreadingHTTPServer((host, port), make_handler(config, config_path))
     print(f"PaperPulse serving on http://{host}:{port}  (Ctrl-C to stop)")
     try:
         server.serve_forever()
