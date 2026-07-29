@@ -19,7 +19,10 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # backtest (optopsy) is gated to Python >=3.12 by its own env marker,
+          # so this is a no-op on the 3.10/3.11 jobs and exercises the real
+          # optopsy integration (not just the skip path) on 3.12.
+          pip install -e ".[dev,backtest]"
       - name: Test
         run: pytest -q
       - name: Type check

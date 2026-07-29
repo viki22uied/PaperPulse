@@ -92,6 +92,28 @@ rather than *"not stated in the abstract"*, so a gap means the authors really
 didn't report it. Costs one download and parse per paper, so it's off by
 default and fails soft per paper.
 
+**Seeing the mechanics.** An alpha card tells you a paper claims something
+about options markets; it can't tell you whether the claim survives real
+money — that needs the paper's own data and a real backtest engine, not a
+regex. What it *can* do is teach how a real backtest actually works:
+
+```bash
+pip install "paperpulse[backtest]"   # needs Python 3.12+; installs optopsy (AGPL-3.0)
+paperpulse backtest                  # or: paperpulse backtest <arxiv-id> for a card's context
+```
+
+This runs [optopsy](https://github.com/goldspanlabs/optopsy), a real
+options-backtesting engine, on a small **synthetic** SPX-shaped chain — how an
+iron condor's four legs get picked by delta, what a backtest actually reports
+(P&L distribution, win rate, profit factor), and, deliberately, what a losing
+trade looks like: an earlier version of this demo used flat synthetic data and
+every trade won, which taught the wrong lesson entirely. It doesn't verify any
+paper's claim — optopsy needs a real historical chain for that (commercial
+data; the project's own docs point at EODHD) — so this is explicitly a "how
+does this work" tool, not a "does this hold" one. It's the one AGPL dependency
+in an otherwise permissively-licensed project, which is why it's an isolated
+opt-in extra rather than bundled into `paperpulse[all]`.
+
 The [sample digest](examples/sample-digest.md) is annotated to show the finance
 paper getting a 🚩 *leakage* flag and the hype paper collecting four flags while a
 careful LoRA study rises to the top.

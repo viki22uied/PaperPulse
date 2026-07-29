@@ -28,6 +28,10 @@ dependencies = [
 semantic = ["sentence-transformers>=2.2,<6"]
 llm = ["openai>=1.0,<2", "anthropic>=0.30,<1"]
 pdf = ["pypdf>=4.0,<6"]
+# Not bundled into `all`: optopsy is AGPL-3.0 (everything else here is
+# permissively licensed) and needs Python 3.12+, one major version ahead of
+# PaperPulse's own floor -- so it stays an explicit, separate opt-in.
+backtest = ["optopsy>=2.3,<3; python_version >= '3.12'"]
 dev = ["pytest>=7.0,<10", "mypy>=1.8,<2", "types-PyYAML"]
 all = [
     "sentence-transformers>=2.2,<6",
@@ -66,5 +70,6 @@ module = [
     "pypdf.*",
     "sklearn.*",
     "sentence_transformers.*",
+    "optopsy.*",
 ]
 ignore_missing_imports = true

@@ -261,6 +261,87 @@ def _cmd_alpha(args: argparse.Namespace) -> int:
     return 0
 
 
+_BACKTEST_PRIMER = """\
+[bold]How to read this[/bold]
+
+An iron condor sells a call spread above the market and a put spread below \
+it, betting the underlying stays inside the range. Each leg is picked by \
+[bold]delta[/bold] -- roughly its odds of expiring in the money -- not by a \
+fixed strike price, so the position adapts to volatility day to day.
+
+Each row below is one [bold]dte_range[/bold] x [bold]delta_range[/bold] \
+bucket (entries are grouped by days-to-expiration and each leg's delta at \
+entry). [bold]mean[/bold]/[bold]std[/bold] are the P&L distribution across \
+trades in that bucket; [bold]win_rate[/bold] and [bold]profit_factor[/bold] \
+(gross wins / gross losses) are the two numbers papers usually lead with -- \
+and the two most gameable, since a 90% win rate can still lose money if the \
+10% losses are large.\
+"""
+
+
+def _cmd_backtest(args: argparse.Namespace) -> int:
+    """Run a real options backtest (via optopsy) on synthetic data, to show
+    the mechanics -- delta-targeted strike selection, multi-leg construction,
+    and the risk metrics a backtest actually reports."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from . import backtest as backtest_mod
+
+    console = Console()
+    if not backtest_mod.OPTOPSY_AVAILABLE:
+        console.print(f"[red]Error:[/red] {backtest_mod.INSTALL_HINT}")
+        return 1
+
+    card = None
+    if args.paper_id:
+        config = Config.load(args.config)
+        config.alpha_cards = True
+        err = Console(stderr=True)
+        result = run_digest(
+            config, dry_run=True, on_stage=lambda m: err.print(f"[dim]{m}[/dim]")
+        )
+        match = next(
+            (i for i in result.ranked if i.paper.id == args.paper_id), None
+        )
+        if match is None:
+            console.print(f"[red]Error:[/red] {args.paper_id!r} not in today's batch.")
+            return 1
+        card = match.alpha
+
+    demo = backtest_mod.run_demo(card)
+
+    console.print(
+        Panel(
+            "\n".join(f"• {n}" for n in demo.notes),
+            title=f"Demo backtest: {demo.strategy}",
+        )
+    )
+    console.print(_BACKTEST_PRIMER)
+
+    if len(demo.aggregated):
+        # optopsy's raw output has one delta_range column per leg plus every
+        # quantile; that's ~15 columns, wider than any terminal. Keep the
+        # ones a person actually reads.
+        df = demo.aggregated.reset_index()
+        wanted = [c for c in df.columns if c == "dte_range" or c.startswith("delta_range")]
+        wanted += [c for c in ("count", "mean", "win_rate", "profit_factor") if c in df.columns]
+        table = Table(show_lines=False)
+        for col in wanted:
+            table.add_column(col.replace("delta_range_", ""))
+        for _, row in df[wanted].round(3).iterrows():
+            table.add_row(*(str(v) for v in row))
+        console.print(table)
+        console.print(
+            "[dim](std/min/25%/50%/75%/max omitted for width -- "
+            "re-run in Python for the full frame.)[/dim]"
+        )
+    else:
+        console.print("[dim]No trades matched in the synthetic chain.[/dim]")
+    return 0
+
+
 def _cmd_sources(_: argparse.Namespace) -> int:
     from .sources import available
 
@@ -522,6 +603,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_alpha.add_argument("--quiet", action="store_true", help="hide progress")
     p_alpha.set_defaults(func=_cmd_alpha)
+
+    p_backtest = sub.add_parser(
+        "backtest",
+        help="run a real options backtest (via optopsy) on synthetic data, "
+        "to see the mechanics -- needs `pip install paperpulse[backtest]`",
+    )
+    p_backtest.add_argument(
+        "paper_id", nargs="?", default=None,
+        help="an arXiv id from today's batch, for context (optional)",
+    )
+    p_backtest.set_defaults(func=_cmd_backtest)
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)
