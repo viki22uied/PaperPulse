@@ -117,6 +117,12 @@ def _initial_selection(config: Config) -> list[str]:
 _SHELL = """<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PaperPulse</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.css"
+  integrity="sha384-1vdNCNel6Tx/NQa8IR1mGOGKsbGreCkOPfbtPPnUURJ5Tu2PRVfQ/7KLZC+Pi1p1" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.js"
+  integrity="sha384-ycJ6GAwiS15LoUPipwJOrWTvkUHl/YqELValBwI5I4awP1EeEQJYarj+w85ntcz7" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/contrib/auto-render.min.js"
+  integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
 <style>
  :root{--fg:#111;--muted:#666;--line:#e3e3e3;--accent:#3157ff;--chip:#f2f4f8;--chipfg:#333}
  @media(prefers-color-scheme:dark){:root{--fg:#eee;--muted:#9aa;--line:#333;--accent:#7c9bff;--chip:#1c2230;--chipfg:#cdd}body{background:#111}}
@@ -207,6 +213,17 @@ function renderFilter(){
   f.appendChild(act);
 }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function mathify(s){
+  // Abstracts often use \begin{equation*}...\end{equation*} (and align/gather)
+  // with no surrounding $/\[ delimiter for auto-render to find. Normalize to
+  // $$...$$ instead of registering the environment names as their own
+  // delimiters -- braces and "*" are regex metacharacters, and auto-render's
+  // delimiter matching broke silently (a mangled partial render) when tried
+  // as raw delimiter strings.
+  if(s==null) return s;
+  return String(s).replace(/\\\\begin\{(equation|align|gather|multline)\*?\}/g, "$$$$")
+                   .replace(/\\\\end\{(equation|align|gather|multline)\*?\}/g, "$$$$");
+}
 function bar(score){ const w=12, fl=Math.max(0,Math.min(w,Math.round(score*w))); return "\\u2588".repeat(fl)+"\\u2591".repeat(w-fl); }
 let lastPapers = [];
 let resultFilter = "all";
@@ -218,6 +235,9 @@ const RESULT_FILTERS = {
   known: { label: "Known factor families only",
     test: p => ((p.trust && p.trust.flags) || []).some(f => f.name === "known_topic") },
   untested: { label: "Untested regions only", test: p => !!p.region_note },
+  alpha4: { label: "Alpha card: 4/4", test: p => p.alpha && p.alpha.score === 4 },
+  alphaStrong: { label: "Alpha card: strong+", test: p => p.alpha && p.alpha.score >= 3 },
+  alphaAny: { label: "Has alpha card", test: p => !!p.alpha },
 };
 async function load(){
   const res = document.getElementById("results");
@@ -259,13 +279,14 @@ function renderDiff(d){
   res.innerHTML =
     '<div class="sub">Changes since '+esc((d.since||"").slice(0,19))+'</div>'+
     sec("New papers", d.new_papers, p =>
-      '<li style="color:inherit"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.title)+'</a>'+
+      '<li style="color:inherit"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(mathify(p.title))+'</a>'+
       (p.badge ? ' <span class="badge '+esc(p.badge)+'">'+esc(p.badge)+'</span>' : '')+'</li>')+
     sec("Fresh evidence on tracked dead/weak factors", d.factor_evidence, f =>
       '<li><b>'+esc(f.name)+'</b> ('+esc(f.result)+'): <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+
       esc(f.title)+'</a></li>')+
     sec("Contradictions that flipped", d.polarity_flips, x =>
       '<li>'+esc(x.note)+'</li>');
+  typesetMath(res);
 }
 function resultFilterBar(){
   const bar = document.createElement("div"); bar.className = "actions";
@@ -313,7 +334,7 @@ function render(papers){
       alphaHtml =
         '<div class="alpha"><div class="ahead">Alpha card '+
           '<span class="atag '+esc(a.testability)+'">'+esc(a.testability)+' '+a.score+'/4</span></div>'+
-        row("claim", a.claim) + row("reported", a.effects) + row("data", a.data_sources) +
+        row("claim", mathify(a.claim)) + row("reported", a.effects) + row("data", a.data_sources) +
         row("universe", a.universe) + row("period", a.period) +
         (a.missing && a.missing.length
           ? '<div class="amiss">not stated '+(a.from_full_text?"in the paper":"in the abstract")+
@@ -324,16 +345,34 @@ function render(papers){
     const regionNote = p.region_note ? '<div class="meta">✅ '+esc(p.region_note)+'</div>' : "";
     const card = document.createElement("div"); card.className="card";
     card.innerHTML =
-      '<h3>'+(i+1)+'. '+esc(p.title)+'</h3>'+
+      '<h3>'+(i+1)+'. '+esc(mathify(p.title))+'</h3>'+
       '<div class="bar">'+bar(p.score)+' relevance '+p.score.toFixed(2)+
         ' <span class="badge '+badge+'">'+badge+'</span> '+prio+'</div>'+
       (quotes ? '<div class="market">'+quotes+'</div>' : '')+
-      (p.summary ? '<p>'+esc(p.summary)+'</p>' : '')+
+      (p.summary ? '<p>'+esc(mathify(p.summary))+'</p>' : '')+
       alphaHtml + region + regionNote +
       (flags ? '<ul class="flags">'+flags+'</ul>' : '')+
       '<div class="meta"><a href="'+esc(p.url)+'" target="_blank" rel="noopener">abstract</a> · <code>'+esc(p.id)+'</code></div>';
     res.appendChild(card);
   });
+  typesetMath(res);
+}
+function typesetMath(el){
+  // Abstracts routinely carry raw LaTeX ($...$, \\(...\\), \\[...\\]); render
+  // it as actual math instead of dumping the markup as text. KaTeX is loaded
+  // deferred, and by the time a fetch resolves it is always ready -- but
+  // guard anyway in case a page renders before the CDN script finishes.
+  if(typeof renderMathInElement === "function"){
+    renderMathInElement(el, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "$", right: "$", display: false},
+        {left: "\\(", right: "\\)", display: false},
+      ],
+      throwOnError: false,
+    });
+  }
 }
 renderFilter();
 load();
