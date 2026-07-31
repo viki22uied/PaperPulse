@@ -14,6 +14,8 @@ If this saves you from reading a paper that wasn't worth your time, a ⭐ helps 
 🗺️ **[Roadmap](ROADMAP.md)** &nbsp;·&nbsp;
 🧪 **[Annotated example](examples/sample-digest.md)**
 
+![PaperPulse dashboard — ranked, trust-scored papers with relevance bars, clean/mixed/caution badges, and alpha cards](docs/screenshot.png)
+
 ## What it actually does
 
 1. **Ranks papers by what you care about.** You describe your interests in a sentence. PaperPulse ranks today's papers against that, and gets smarter every time you say "more like this" / "less like this."
