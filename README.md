@@ -4,10 +4,13 @@
 [![PyPI](https://img.shields.io/pypi/v/paperpulse)](https://pypi.org/project/paperpulse/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/viki22uied/PaperPulse?style=social)](https://github.com/viki22uied/PaperPulse/stargazers)
 
 **Every day, arXiv posts hundreds of new papers. PaperPulse picks the five that actually matter to you, tells you whether to trust them, and explains why — all in plain English.**
 
-📄 **[See a real digest generated today →](examples/2026-07-14.md)** &nbsp;·&nbsp;
+If this saves you from reading a paper that wasn't worth your time, a ⭐ helps other researchers find it too.
+
+📄 **[See a real digest generated today →](examples/2026-07-31.md)** &nbsp;·&nbsp;
 🗺️ **[Roadmap](ROADMAP.md)** &nbsp;·&nbsp;
 🧪 **[Annotated example](examples/sample-digest.md)**
 

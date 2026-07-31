@@ -13,7 +13,8 @@ authors = [{ name = "viki22uied" }]
 keywords = [
     "arxiv", "research", "digest", "nlp", "embeddings", "recommender",
     "quant-finance", "finance", "econometrics", "backtesting", "options-trading",
-    "trust-score", "paper-triage",
+    "trust-score", "paper-triage", "research-tool", "self-hosted", "dashboard",
+    "llm", "research-assistant",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

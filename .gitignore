@@ -16,6 +16,7 @@ digests/
 paperpulse.yaml
 
 # Tooling
+.claude/
 .pytest_cache/
 .mypy_cache/
 .coverage
