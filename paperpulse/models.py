@@ -65,3 +65,6 @@ class RankedPaper:
     # The paper's testable market claim (paperpulse.alpha.AlphaCard), or None
     # when the paper makes no market claim to card.
     alpha: Optional["AlphaCard"] = None
+    # One-line "why this rank" explainer -- nearest liked paper from history, or
+    # a cold-start fallback naming the interest profile. "" when not computed.
+    why_rank: str = ""

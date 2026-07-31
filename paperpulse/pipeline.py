@@ -183,7 +183,51 @@ def _attach_trust(
             semantic_topic_similarity=semantic_similarity,
             **context_base,
         )
-        item.trust = trust_mod.assess(item.paper, enabled=signals, context=ctx)
+        item.trust = trust_mod.assess(
+            item.paper,
+            enabled=signals,
+            context=ctx,
+            weight_overrides=config.trust_signal_weights or None,
+        )
+
+
+def _attach_why_rank(
+    state: State, ranked: list[RankedPaper], backend, user: str = DEFAULT_USER
+) -> None:
+    """One-line "why this rank" explainer, so the relevance number isn't a
+    black box: the nearest liked paper from history when there's feedback to
+    compare against, falling back to naming the interest profile at cold
+    start. Liked papers are re-embedded once per digest run, not once per
+    ranked paper, so this stays cheap even with a long feedback history."""
+    profile = state.get_profile(user)
+    liked_ids = profile.liked_ids if profile else []
+
+    liked_titles: list[str] = []
+    liked_texts: list[str] = []
+    for pid in liked_ids:
+        record = state.shown.get(pid)
+        if record:
+            liked_titles.append(record["title"])
+            liked_texts.append(
+                Paper(id=pid, title=record["title"], abstract=record["abstract"]).as_text()
+            )
+
+    if not liked_texts:
+        for item in ranked:
+            item.why_rank = "Matches your stated interests (no liked papers yet to compare against)."
+        return
+
+    liked_matrix = backend.encode(liked_texts)
+    for item in ranked:
+        if item.vector is None:
+            item.why_rank = "Matches your stated interests."
+            continue
+        sims = liked_matrix @ item.vector
+        best = int(np.argmax(sims))
+        item.why_rank = (
+            f"Closest to your liked paper “{liked_titles[best]}” "
+            f"(similarity {float(sims[best]):.2f})."
+        )
 
 
 def _attach_regions(config: Config, ranked: list[RankedPaper]) -> None:
@@ -255,11 +299,19 @@ def run_digest(
     skip_seen: bool = True,
     dry_run: bool = False,
     on_stage: Callable[[str], None] | None = None,
+    include_diff: bool = False,
 ) -> DigestResult:
     """Generate today's digest end to end.
 
     ``on_stage`` (optional) is called with a short human-readable message at
-    each stage boundary, so callers like the CLI can show progress."""
+    each stage boundary, so callers like the CLI can show progress.
+
+    ``include_diff`` prepends a "What changed this week" section built from
+    ``diff_digest`` -- off by default because it re-runs the full pipeline a
+    second time (diff_digest calls run_digest itself, with skip_seen=False, to
+    see the true current batch); ``diff_digest``'s own internal call always
+    leaves this False so the two can never recurse into each other.
+    """
     stage = on_stage or (lambda _msg: None)
 
     stage("Loading embedding backend…")
@@ -308,6 +360,8 @@ def run_digest(
                 item.paper, full_text=full_texts.get(item.paper.id)
             )
 
+    _attach_why_rank(state, ranked, backend, user)
+
     stage("Summarising…")
     for item in ranked:
         item.summary = summarise(
@@ -322,6 +376,13 @@ def run_digest(
 
     subtitle = f"{config.source} · " + " · ".join(config.categories)
     markdown = render_markdown(ranked, subtitle=subtitle)
+
+    if include_diff:
+        stage("Diffing against last run…")
+        diff = diff_digest(config, user=user, mark=False)
+        diff_section = _render_diff_section(diff)
+        if diff_section:
+            markdown = diff_section + "\n" + markdown
 
     result = DigestResult(markdown=markdown, ranked=ranked, contradictions=contradictions)
 
@@ -419,6 +480,41 @@ def new_factor_evidence(
     finally:
         log.close()
     return found
+
+
+def _render_diff_section(diff: "DiffResult") -> str:
+    """Markdown for the "What changed this week" section, built from a
+    DiffResult -- the diff/contradiction engine already existed (diff_digest,
+    contradiction_map) but was only reachable via the CLI/API, never surfaced
+    in the digest itself even though "these two papers disagree, and last
+    week's consensus just flipped" is a higher-value insight than another
+    relevance-ranked entry. Returns "" when there's nothing to say, so callers
+    can skip prepending an empty section (no baseline yet, or a quiet week)."""
+    if diff.is_first_run:
+        return ""
+    if not (diff.new_papers or diff.factor_evidence or diff.polarity_flips):
+        return ""
+
+    lines = ["## What changed this week", ""]
+    if diff.new_papers:
+        lines.append(f"**{len(diff.new_papers)} new paper(s)** since last run:")
+        for item in diff.new_papers[:10]:
+            badge = f" [{item.trust.badge}]" if item.trust else ""
+            lines.append(f"- {item.paper.title}{badge}")
+        lines.append("")
+    if diff.factor_evidence:
+        lines.append("**Fresh evidence on tracked dead/weak factors:**")
+        for entry, item in diff.factor_evidence:
+            lines.append(f"- {entry.name} ({entry.result}): {item.paper.title}")
+        lines.append("")
+    if diff.polarity_flips:
+        lines.append("**Disagreements that reversed:**")
+        for _a, _b, note in diff.polarity_flips:
+            lines.append(f"- {note}")
+        lines.append("")
+    lines.append("---")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def diff_digest(config: Config, *, user: str = DEFAULT_USER, mark: bool = False) -> DiffResult:
@@ -524,6 +620,63 @@ def apply_feedback(
     state.set_profile(profile, user)
     state.save(config.state_path)
     return profile
+
+
+def score_accuracy_report(config: Config, *, user: str = DEFAULT_USER) -> dict:
+    """Is the trust badge actually predictive, or just noise dressed up as a
+    number? Cross-references every paper you've liked/disliked (recorded on
+    the interest profile by ``apply_feedback``) against the trust score/badge
+    logged for it at digest time (``_record_community``), and reports the
+    like-rate per badge tier. If "clean" and "caution" papers get liked at
+    about the same rate, the score isn't predictive and needs recalibrating --
+    this makes that measurable instead of eyeballed.
+    """
+    if not config.community_db:
+        return {"error": "community_db not configured -- nothing was logged to cross-reference."}
+
+    state = State.load(config.state_path)
+    profile = state.get_profile(user)
+    if profile is None or not (profile.liked_ids or profile.disliked_ids):
+        return {"error": f"no feedback recorded yet for user '{user}'."}
+
+    from .community import CommunityDB
+
+    db = CommunityDB(config.community_db)
+    try:
+        all_ids = list(dict.fromkeys(profile.liked_ids + profile.disliked_ids))
+        trust_by_id = db.trust_for(all_ids)
+    finally:
+        db.close()
+
+    liked_by_badge: dict[str, int] = {}
+    total_by_badge: dict[str, int] = {}
+    unscored = 0
+    for pid in profile.liked_ids:
+        info = trust_by_id.get(pid)
+        if info is None:
+            unscored += 1
+            continue
+        badge = info["badge"]
+        total_by_badge[badge] = total_by_badge.get(badge, 0) + 1
+        liked_by_badge[badge] = liked_by_badge.get(badge, 0) + 1
+    for pid in profile.disliked_ids:
+        info = trust_by_id.get(pid)
+        if info is None:
+            unscored += 1
+            continue
+        badge = info["badge"]
+        total_by_badge[badge] = total_by_badge.get(badge, 0) + 1
+
+    like_rate_by_badge = {
+        badge: round(liked_by_badge.get(badge, 0) / count, 3)
+        for badge, count in total_by_badge.items()
+    }
+    return {
+        "user": user,
+        "counts_by_badge": total_by_badge,
+        "like_rate_by_badge": like_rate_by_badge,
+        "n_unscored": unscored,  # liked/disliked ids with no logged trust report
+    }
 
 
 def find_similar_to_work(

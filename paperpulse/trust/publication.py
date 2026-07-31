@@ -58,10 +58,13 @@ def peer_review_signal(paper: Paper, **_) -> Signal:
             "never have cleared peer review.",
             evidence=f"published {paper.published:%Y-%m}, v1, no journal_ref",
             confidence=0.6,
+            hygiene=True,
         )
+    # True of most arXiv preprints and not paper-specific, so it's metadata,
+    # not a score-moving signal -- see Signal.hygiene.
     return Signal(
         "peer_review", WARN, "Preprint only -- not yet peer-reviewed.",
-        confidence=0.4,
+        confidence=0.4, hygiene=True,
     )
 
 

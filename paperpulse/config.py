@@ -51,6 +51,11 @@ class Config:
     trust: bool = True
     trust_signals: list[str] | None = None  # None => library defaults
     trust_online: bool = False  # enable network checks (links, retractions)
+    # Per-signal weight overrides, e.g. {"leakage": 2.0, "peer_review": 0.5}.
+    # Signals not listed keep their library-default weight. Lets a quant-focused
+    # user emphasise leakage/survivorship_bias/backtest_overfit without forking
+    # the signal code, while someone outside finance can turn them back down.
+    trust_signal_weights: dict[str, float] = field(default_factory=dict)
 
     # Known-topics semantic match (opt-in). The default name/alias match is
     # deterministic and exact; this adds an embedding cosine fallback so a

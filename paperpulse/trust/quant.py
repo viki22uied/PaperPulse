@@ -118,6 +118,7 @@ def metric_gaming_signal(paper: Paper, **_) -> Signal:
             "the improvement is within variance.",
             evidence=f"{metric.group(0)} … {gaming.group(0)}",
             confidence=0.55,
+            weight=1.3,
         )
     return Signal("metric_gaming", OK, "No metric-gaming language detected.")
 
@@ -146,6 +147,8 @@ def leakage_signal(paper: Paper, **_) -> Signal:
     ts = TIME_SERIES_TERMS.search(text)
     split = LEAKAGE_TERMS.search(text)
     if ts and split:
+        # Substantive methodology signal -- weighted above the library default
+        # so a single leakage flag can't be diluted by a batch of hygiene notes.
         return Signal(
             "leakage",
             FLAG,
@@ -153,6 +156,7 @@ def leakage_signal(paper: Paper, **_) -> Signal:
             "leakage; a temporal split is usually required.",
             evidence=f"{ts.group(0)} + {split.group(0)}",
             confidence=0.75,
+            weight=1.5,
         )
     return Signal("leakage", OK, "No obvious train/test leakage pattern.")
 
@@ -217,6 +221,7 @@ def backtest_overfit_signal(paper: Paper, **_) -> Signal:
             "backtest window.",
             evidence=match.group(0),
             confidence=0.6,
+            weight=1.3,
         )
     return Signal("backtest_overfit", OK, "No backtest-only red flag.")
 
@@ -235,6 +240,7 @@ def survivorship_bias_signal(paper: Paper, **_) -> Signal:
             "suffer from survivorship bias.",
             evidence=backtest.group(0),
             confidence=0.5,
+            weight=1.3,
         )
     return Signal("survivorship_bias", OK, "No survivorship-bias red flag.")
 

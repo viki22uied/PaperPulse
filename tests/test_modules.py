@@ -69,6 +69,19 @@ def test_community_db_records_and_leaderboards(tmp_path):
     db.close()
 
 
+def test_community_db_trust_for(tmp_path):
+    db = CommunityDB(tmp_path / "c.db")
+    db.record_trust("p1", score=0.3, badge="caution", flags=["overclaim"])
+    db.record_trust("p2", score=0.9, badge="clean", flags=[])
+    result = db.trust_for(["p1", "p2", "missing"])
+    assert result == {
+        "p1": {"score": 0.3, "badge": "caution"},
+        "p2": {"score": 0.9, "badge": "clean"},
+    }
+    assert db.trust_for([]) == {}
+    db.close()
+
+
 def test_community_db_notes(tmp_path):
     db = CommunityDB(tmp_path / "c.db")
     assert db.get_notes("p1") == []

@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from .config import Config, DEFAULT_CONFIG_PATH
-from .pipeline import apply_feedback, find_similar_to_work, run_digest
+from .pipeline import apply_feedback, find_similar_to_work, run_digest, score_accuracy_report
 
 
 # Topic packs for `init`: preset name -> (categories, default interests).
@@ -154,6 +154,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 skip_seen=not args.include_seen,
                 dry_run=args.dry_run,
                 on_stage=status.update,
+                include_diff=not args.no_diff,
             )
     else:
         result = run_digest(
@@ -162,6 +163,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             skip_seen=not args.include_seen,
             dry_run=args.dry_run,
             on_stage=lambda msg: print(msg, file=sys.stderr),
+            include_diff=not args.no_diff,
         )
     print(result.markdown)
     if result.contradictions and not args.dry_run:
@@ -456,6 +458,27 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_score_accuracy(args: argparse.Namespace) -> int:
+    """Cross-reference liked/disliked papers against their logged trust badge."""
+    config = Config.load(args.config)
+    report = score_accuracy_report(config, user=args.user)
+
+    if "error" in report:
+        print(report["error"])
+        return 1
+
+    print(f"Trust-score accuracy for user '{report['user']}':\n")
+    counts = report["counts_by_badge"]
+    rates = report["like_rate_by_badge"]
+    if not counts:
+        print("  No liked/disliked papers have a logged trust report yet.")
+    for badge in sorted(counts, key=lambda b: rates.get(b, 0), reverse=True):
+        print(f"  {badge:<8} like-rate {rates[badge]:.0%}  ({counts[badge]} rated)")
+    if report["n_unscored"]:
+        print(f"\n  ({report['n_unscored']} liked/disliked id(s) had no logged trust report.)")
+    return 0
+
+
 def _cmd_factors_list(args: argparse.Namespace) -> int:
     from .topics import TopicLog
 
@@ -519,6 +542,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("--include-seen", action="store_true")
     p_run.add_argument("--dry-run", action="store_true")
+    p_run.add_argument(
+        "--no-diff",
+        action="store_true",
+        help="skip the 'What changed this week' section (it re-runs the "
+        "pipeline once more to diff against the last run)",
+    )
     p_run.set_defaults(func=_cmd_run)
 
     p_fb = sub.add_parser("feedback", help="teach the ranker from paper ids")
@@ -583,6 +612,14 @@ def build_parser() -> argparse.ArgumentParser:
         "so repeating the diff shows the same answer)",
     )
     p_diff.set_defaults(func=_cmd_diff)
+
+    p_score_acc = sub.add_parser(
+        "score-accuracy",
+        help="like-rate by trust badge -- is the trust score actually "
+        "predictive of what you find useful?",
+    )
+    p_score_acc.add_argument("--user", default="default")
+    p_score_acc.set_defaults(func=_cmd_score_accuracy)
 
     p_alpha = sub.add_parser(
         "alpha", help="today's papers as alpha cards (claim, data, effect sizes)"

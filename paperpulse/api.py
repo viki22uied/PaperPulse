@@ -10,6 +10,7 @@ capabilities as the CLI:
     GET  /api/diff               -> what changed vs the last recorded run
     POST /api/feedback           -> {"like": [...], "dislike": [...]}
     GET  /api/community/leaderboard
+    GET  /api/score-accuracy?user=... -> like-rate by trust badge (needs community_db)
     GET  /api/notes?paper_id=... -> notes on a paper (needs community_db)
     POST /api/notes              -> {"paper_id", "note", "user"}
 """
@@ -30,7 +31,14 @@ from urllib.parse import parse_qs, urlparse
 from . import market
 from .cli import TOPIC_PACKS, build_init_config
 from .config import Config
-from .pipeline import DiffResult, DigestResult, apply_feedback, diff_digest, run_digest
+from .pipeline import (
+    DiffResult,
+    DigestResult,
+    apply_feedback,
+    diff_digest,
+    run_digest,
+    score_accuracy_report,
+)
 from .sources import available
 
 # Topic filter catalog: group -> [(arXiv category, friendly label), ...]. The
@@ -588,6 +596,12 @@ def make_handler(config: Config, config_path=None):
                     self._json({"leaderboard": db.flag_leaderboard()})
                 finally:
                     db.close()
+            elif path == "/api/score-accuracy":
+                if not config.community_db:
+                    self._json({"error": "community_db not configured"}, 400)
+                    return
+                user = parse_qs(urlparse(self.path).query).get("user", ["default"])[0]
+                self._json(score_accuracy_report(config, user=user))
             elif path == "/api/notes":
                 if not config.community_db:
                     self._json({"error": "community_db not configured"}, 400)

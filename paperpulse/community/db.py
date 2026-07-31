@@ -73,6 +73,19 @@ class CommunityDB:
         )
         self._conn.commit()
 
+    def trust_for(self, paper_ids: list[str]) -> dict[str, dict]:
+        """Latest logged score/badge per paper id, for cross-referencing against
+        like/dislike feedback (see ``pipeline.score_accuracy_report``)."""
+        if not paper_ids:
+            return {}
+        placeholders = ",".join("?" * len(paper_ids))
+        rows = self._conn.execute(
+            f"SELECT paper_id, score, badge FROM trust_reports "
+            f"WHERE paper_id IN ({placeholders})",
+            paper_ids,
+        ).fetchall()
+        return {row["paper_id"]: {"score": row["score"], "badge": row["badge"]} for row in rows}
+
     # --- leaderboard --------------------------------------------------------
     def flag_leaderboard(self, limit: int = 20) -> list[dict]:
         """Authors ranked by how often their papers were flagged. Deliberately

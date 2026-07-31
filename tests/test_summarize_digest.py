@@ -58,6 +58,39 @@ def test_empty_digest_is_friendly():
     assert "No papers" in md
 
 
+def test_digest_tiers_by_batch_relative_percentile():
+    """A cosine score of 0.30 with nothing else in the batch to compare
+    against is meaningless on an absolute 0-1 scale -- the digest should
+    rank/group papers by where they sit within *this* batch, and the raw
+    score stays visible for transparency."""
+    ranked = [
+        RankedPaper(paper=Paper(id="hi", title="High relevance", abstract="..."), score=0.30),
+        RankedPaper(paper=Paper(id="mid", title="Mid relevance", abstract="..."), score=0.15),
+        RankedPaper(paper=Paper(id="lo", title="Low relevance", abstract="..."), score=0.01),
+    ]
+    md = render_markdown(ranked, on_date=date(2024, 1, 1))
+    assert "## Quick scan" in md
+    assert "## Strongest matches" in md
+    assert "## Lower relevance" in md
+    # Raw scores still printed, not just the percentile bucket.
+    assert "0.30" in md and "0.15" in md and "0.01" in md
+    # The top scorer must appear before the bottom scorer in the rendered text.
+    assert md.index("High relevance") < md.index("Low relevance")
+
+
+def test_digest_hygiene_notes_are_separated_from_flags():
+    from paperpulse import trust as trust_mod
+
+    paper = Paper(id="1", title="A preprint", abstract="We study something.")
+    report = trust_mod.assess(paper, enabled=["reproducibility", "peer_review"])
+    item = RankedPaper(paper=paper, score=0.5, trust=report)
+    md = render_markdown([item], on_date=date(2024, 1, 1))
+    assert "Metadata:" in md
+    # Neither hygiene flag should render as a bulleted **WARN** flag line.
+    assert "**WARN** *reproducibility*" not in md
+    assert "**WARN** *peer_review*" not in md
+
+
 def test_config_roundtrip(tmp_path: Path):
     cfg = Config(categories=["q-fin.PM"], top_n=7)
     path = tmp_path / "c.yaml"

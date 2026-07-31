@@ -29,6 +29,11 @@ class Signal:
     weight: float = 1.0
     evidence: str = ""       # exact text that triggered the flag (explainability)
     confidence: float = 1.0  # how reliable this heuristic's call is, 0-1
+    # Metadata/hygiene flags (preprint status, no code link) are true of most
+    # preprints and mostly meaningless on their own -- they're excluded from the
+    # trust score entirely (not just down-weighted) and surfaced separately in
+    # the digest, so they can't drag "clean" work down to "mixed" by volume.
+    hygiene: bool = False
 
 
 @dataclass
@@ -38,7 +43,13 @@ class TrustReport:
 
     @property
     def flags(self) -> list[Signal]:
-        return [s for s in self.signals if s.status != OK]
+        """Substantive (non-hygiene) flags -- what actually moved the score."""
+        return [s for s in self.signals if s.status != OK and not s.hygiene]
+
+    @property
+    def hygiene_notes(self) -> list[Signal]:
+        """Metadata-only flags: informative, but never part of the score."""
+        return [s for s in self.signals if s.status != OK and s.hygiene]
 
     @property
     def badge(self) -> str:
@@ -123,8 +134,15 @@ def assess(
     *,
     enabled: list[str] | None = None,
     context: SignalContext | None = None,
+    weight_overrides: dict[str, float] | None = None,
 ) -> TrustReport:
-    """Run the enabled signals over a paper and aggregate into a report."""
+    """Run the enabled signals over a paper and aggregate into a report.
+
+    ``weight_overrides`` (from ``Config.trust_signal_weights``) lets a user
+    turn a signal's importance up or down without forking the signal itself --
+    e.g. a quant-focused user weighting ``leakage``/``survivorship_bias`` higher
+    than someone reading outside finance.
+    """
     names = enabled if enabled is not None else DEFAULT_SIGNALS
     ctx = context or SignalContext()
     # Pass the whole context through: every signal takes **_, so it ignores what
@@ -141,13 +159,24 @@ def assess(
         if fn is None:
             continue
         try:
-            signals.append(fn(paper, **kwargs))
+            sig = fn(paper, **kwargs)
         except Exception:
             # A misbehaving signal must never sink the whole digest.
-            signals.append(Signal(name, OK, "Signal skipped (error)."))
+            sig = Signal(name, OK, "Signal skipped (error).")
+        if weight_overrides and name in weight_overrides:
+            sig.weight = weight_overrides[name]
+        signals.append(sig)
 
-    total_weight = sum(s.weight for s in signals) or 1.0
-    penalty = sum(_PENALTY[s.status] * s.weight for s in signals) / total_weight
+    # Hygiene (metadata-only) signals never enter the score -- see Signal.hygiene.
+    scored = [s for s in signals if not s.hygiene]
+    total_weight = sum(s.weight for s in scored) or 1.0
+    # `confidence` used to be computed per-signal and then ignored here, so a
+    # low-confidence boilerplate WARN dragged the score down exactly as much as
+    # a high-confidence substantive FLAG. Folding it into the penalty is what
+    # makes the aggregate score actually discriminate between papers.
+    penalty = sum(
+        _PENALTY[s.status] * s.weight * s.confidence for s in scored
+    ) / total_weight
     return TrustReport(signals=signals, score=round(1.0 - penalty, 3))
 
 

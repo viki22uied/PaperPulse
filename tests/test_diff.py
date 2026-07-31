@@ -187,3 +187,79 @@ def test_snapshots_are_keyed_per_category_set():
         other = replace(config, categories=["cs.LG"])
         diff = _run_with([_MOM1_POSITIVE], diff_digest, other)
         assert diff.is_first_run
+
+
+def test_run_digest_include_diff_surfaces_what_changed_section():
+    """The diff/contradiction engine existed but was only reachable via the
+    CLI/API, never in the rendered digest itself. `include_diff=True` should
+    prepend a "What changed this week" section -- and, critically, must not
+    recurse into itself (diff_digest calls run_digest internally)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        topics_db = Path(tmp) / "topics.db"
+        _seed_topics(topics_db)
+        config = _config(tmp, topics_db)
+
+        # Run 1: record a baseline. No diff section yet (no prior snapshot).
+        result1 = _run_with(
+            [_MOM1_POSITIVE, _BOARD], run_digest, config, dry_run=False, include_diff=True
+        )
+        assert "What changed this week" not in result1.markdown
+
+        # Run 2: a new paper appears -- the section should now show up.
+        result2 = _run_with(
+            [_MOM1_POSITIVE, _BOARD, _NEW_PAPER],
+            run_digest,
+            config,
+            dry_run=True,
+            include_diff=True,
+        )
+        assert "What changed this week" in result2.markdown
+        assert "Satellite Luminosity as a Firm Growth Signal" in result2.markdown
+
+
+def test_score_accuracy_report_computes_like_rate_by_badge():
+    from paperpulse.community import CommunityDB
+    from paperpulse.pipeline import apply_feedback, score_accuracy_report
+
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "state.json"
+        community_db = Path(tmp) / "community.db"
+        config = Config(
+            embedding_backend="hashing",
+            interests="equity factor research",
+            state_path=str(state_path),
+            community_db=str(community_db),
+        )
+
+        # apply_feedback re-embeds from state.shown, so the ids must be "shown"
+        # first, same as a real digest run would leave them.
+        import paperpulse.pipeline as pipeline_mod
+        from paperpulse.store import State
+
+        state = State.load(config.state_path)
+        state.shown["liked1"] = {"title": "Liked paper", "abstract": "momentum"}
+        state.shown["disliked1"] = {"title": "Disliked paper", "abstract": "noise"}
+        state.save(config.state_path)
+
+        db = CommunityDB(community_db)
+        db.record_trust("liked1", score=0.95, badge="clean", flags=[])
+        db.record_trust("disliked1", score=0.95, badge="clean", flags=[])
+        db.close()
+
+        apply_feedback(config, ["liked1"], ["disliked1"])
+
+        report = score_accuracy_report(config)
+        assert report["counts_by_badge"] == {"clean": 2}
+        # 1 of the 2 "clean"-badged papers was actually liked -- a 50% like
+        # rate for "clean" is exactly the kind of evidence that should make you
+        # distrust the badge, and this is what makes it measurable.
+        assert report["like_rate_by_badge"]["clean"] == 0.5
+        assert report["n_unscored"] == 0
+
+
+def test_score_accuracy_report_without_community_db_errors_cleanly():
+    from paperpulse.pipeline import score_accuracy_report
+
+    config = Config(community_db="")
+    report = score_accuracy_report(config)
+    assert "error" in report

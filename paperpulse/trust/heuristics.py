@@ -80,9 +80,11 @@ def overclaim_signal(paper: Paper, **_) -> Signal:
     hedged = len(HEDGES.findall(text))
     ev = _phrases(strong)
     if len(strong) >= 3 and hedged == 0:
+        # Substantive methodology signal, not boilerplate -- weighted above the
+        # library default so it isn't diluted by low-confidence hygiene notes.
         return Signal(
             "overclaim", FLAG, f"{len(strong)} assertive claim words and no hedging.",
-            evidence=ev, confidence=0.65,
+            evidence=ev, confidence=0.65, weight=1.5,
         )
     if len(strong) >= 2 and hedged == 0:
         return Signal(
@@ -104,9 +106,11 @@ def reproducibility_signal(paper: Paper, *, full_text: str | None = None, **_) -
         )
     # Absence of a keyword is weaker evidence than a positive match, so confidence
     # is deliberately low -- the code may simply not be named in the abstract.
+    # True of most preprints and rarely paper-specific, so it's metadata, not a
+    # score-moving signal -- see Signal.hygiene.
     return Signal(
         "reproducibility", WARN, "No mention of released code or data.",
-        confidence=0.4,
+        confidence=0.4, hygiene=True,
     )
 
 
