@@ -15,21 +15,11 @@ import urllib.parse
 import urllib.request
 
 from ..models import Paper
+from ..netguard import NO_REDIRECT_OPENER as _NO_REDIRECT_OPENER
 from . import OK, WARN, FLAG, Signal, signal
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
 _CODE_HOSTS = {"github.com", "gitlab.com", "huggingface.co", "zenodo.org"}
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Refuse to follow redirects, so a link that passes the host allowlist
-    can't be used to bounce the request off-host (redirect-based SSRF)."""
-
-    def redirect_request(self, *args, **kwargs):
-        return None
-
-
-_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
 
 RETRACTION_WATCH_API = "https://api.labs.crossref.org/data/retractionwatch"
 S2_PAPER_API = "https://api.semanticscholar.org/graph/v1/paper/arXiv:{}"
@@ -91,7 +81,7 @@ def _query_retraction(title: str, timeout: float = 15.0) -> bool:
         f"{RETRACTION_WATCH_API}?{query}",
         headers={"User-Agent": "PaperPulse/0.1"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
         data = json.loads(response.read())
     items = data.get("message", {}).get("items", data if isinstance(data, list) else [])
     needle = re.sub(r"\W+", " ", title.lower()).strip()
@@ -137,7 +127,7 @@ def _s2_paper_data(arxiv_id: str, timeout: float = 15.0) -> dict:
     if os.environ.get("S2_API_KEY"):
         headers["x-api-key"] = os.environ["S2_API_KEY"]
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
         return json.loads(response.read())
 
 

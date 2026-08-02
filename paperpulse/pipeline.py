@@ -96,6 +96,9 @@ def _literature_reference_texts(topics: list | None) -> list[str]:
     return CANONICAL_FACTOR_PAPERS + [t for t in topic_texts if t]
 
 
+_FULL_TEXT_WORKERS = 5  # polite concurrency, not a hammer on arXiv/bioRxiv/etc.
+
+
 def _fetch_full_texts(
     config: Config, ranked: list[RankedPaper]
 ) -> dict[str, str]:
@@ -103,12 +106,21 @@ def _fetch_full_texts(
 
     Needs the ``pdf`` extra; every paper fails soft on its own, so a missing
     parser or one unreachable PDF degrades that paper to abstract-only rather
-    than failing the digest."""
+    than failing the digest. Fetches run concurrently -- each one is a network
+    round-trip plus a PDF parse, dominated by I/O wait, so a handful of papers
+    that used to take 20s+ apiece in sequence now overlap instead of queueing."""
+    from concurrent.futures import ThreadPoolExecutor
+
     from .fulltext import fetch_full_text
 
+    if not ranked:
+        return {}
+
+    with ThreadPoolExecutor(max_workers=_FULL_TEXT_WORKERS) as pool:
+        results = pool.map(lambda item: fetch_full_text(item.paper), ranked)
+
     texts: dict[str, str] = {}
-    for item in ranked:
-        text = fetch_full_text(item.paper)
+    for item, text in zip(ranked, results):
         if text:
             texts[item.paper.id] = text
     return texts

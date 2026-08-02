@@ -13,6 +13,10 @@ capabilities as the CLI:
     GET  /api/score-accuracy?user=... -> like-rate by trust badge (needs community_db)
     GET  /api/notes?paper_id=... -> notes on a paper (needs community_db)
     POST /api/notes              -> {"paper_id", "note", "user"}
+
+Set PAPERPULSE_API_TOKEN to require an ``Authorization: Bearer <token>`` on
+every request except ``GET /`` (the static shell has nothing to protect --
+it's the /api/* routes it calls client-side that carry actual data).
 """
 
 from __future__ import annotations
@@ -28,7 +32,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, cast
 from urllib.parse import parse_qs, urlparse
 
-from . import market
 from .cli import TOPIC_PACKS, build_init_config
 from .config import Config
 from .pipeline import (
@@ -39,6 +42,7 @@ from .pipeline import (
     run_digest,
     score_accuracy_report,
 )
+from .serialize import digest_to_dict
 from .sources import available
 
 # Topic filter catalog: group -> [(arXiv category, friendly label), ...]. The
@@ -463,53 +467,7 @@ def _shell_html(config: Config) -> str:
 
 def _digest_json(config: Config) -> dict:
     result = _cached_digest(config)
-    return {
-        "papers": [
-            {
-                "id": item.paper.id,
-                "title": item.paper.title,
-                "score": round(item.score, 4),
-                "priority": round(max(0.0, item.score)
-                                  * (item.trust.score if item.trust else 1.0), 4),
-                "summary": item.summary,
-                "regions": item.regions,
-                "region_note": item.region_note or None,
-                "url": item.paper.url,
-                "quotes": market.enrich(f"{item.paper.title} {item.paper.abstract}"),
-                "alpha": None
-                if item.alpha is None
-                else {
-                    "testability": item.alpha.testability,
-                    "score": item.alpha.testability_score,
-                    "claim": item.alpha.claim,
-                    "effects": item.alpha.effects,
-                    "data_sources": item.alpha.data_sources,
-                    "universe": item.alpha.universe,
-                    "period": item.alpha.period,
-                    "missing": item.alpha.missing,
-                    "from_full_text": item.alpha.from_full_text,
-                },
-                "trust": None
-                if item.trust is None
-                else {
-                    "score": item.trust.score,
-                    "badge": item.trust.badge,
-                    "flags": [
-                        {
-                            "name": s.name, "status": s.status, "note": s.note,
-                            "evidence": s.evidence, "confidence": s.confidence,
-                        }
-                        for s in item.trust.flags
-                    ],
-                },
-            }
-            for item in result.ranked
-        ],
-        "contradictions": [
-            {"a": p.a.id, "b": p.b.id, "similarity": round(p.similarity, 3)}
-            for p in result.contradictions
-        ],
-    }
+    return digest_to_dict(result, include_market_quotes=True)
 
 
 def _diff_json(config: Config) -> dict:
@@ -560,8 +518,27 @@ def make_handler(config: Config, config_path=None):
         def _json(self, obj, code: int = 200) -> None:
             self._send(code, json.dumps(obj), "application/json")
 
+        def _authorized(self) -> bool:
+            # Opt-in protection: when PAPERPULSE_API_TOKEN is set (e.g. for a
+            # network-exposed instance), every request must carry it as a
+            # Bearer token. Unset = open, the localhost default. Shared by
+            # do_GET and do_POST so the check can't be added to one and
+            # silently skipped on the other.
+            token = os.environ.get("PAPERPULSE_API_TOKEN")
+            if not token:
+                return True
+            supplied = self.headers.get("Authorization", "")
+            return hmac.compare_digest(supplied, f"Bearer {token}")
+
         def do_GET(self) -> None:
             path = urlparse(self.path).path
+            # The static shell has no server-rendered secrets, so it's exempt
+            # -- but every /api/* route it calls client-side is gated, so a
+            # configured token actually locks down digest/notes/config reads,
+            # not just writes.
+            if path != "/" and not self._authorized():
+                self._json({"error": "unauthorized"}, 401)
+                return
             if path == "/":
                 self._send(200, _shell_html(config), "text/html; charset=utf-8")
             elif path == "/api/sources":
@@ -623,15 +600,9 @@ def make_handler(config: Config, config_path=None):
         def do_POST(self) -> None:
             nonlocal config  # /api/config may reassign it; declared up front
             # for mypy's flow analysis of the later branches, not just this one.
-            # Opt-in write protection: when PAPERPULSE_API_TOKEN is set (e.g.
-            # for a network-exposed instance), POSTs must carry it as a Bearer
-            # token. Unset = open, the localhost default.
-            token = os.environ.get("PAPERPULSE_API_TOKEN")
-            if token:
-                supplied = self.headers.get("Authorization", "")
-                if not hmac.compare_digest(supplied, f"Bearer {token}"):
-                    self._json({"error": "unauthorized"}, 401)
-                    return
+            if not self._authorized():
+                self._json({"error": "unauthorized"}, 401)
+                return
             path = urlparse(self.path).path
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length) if length else b"{}"

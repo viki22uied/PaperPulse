@@ -171,6 +171,12 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ 3-bullet plain-English digest (extractive default; LLM optional)
 - ✅ Trust-score badge alongside each summary
 - ✅ Markdown digest output
+- ✅ JSON digest output (`paperpulse run --format json`) — same shape as
+  `GET /api/digest`, for scripts/dashboards/cron jobs that want structured
+  data rather than markdown to parse
+- ✅ BibTeX export (`paperpulse export`) — straight into Zotero, Mendeley,
+  EndNote, or a LaTeX bibliography; arXiv ids get proper `eprint`/
+  `archivePrefix` fields, other sources fall back to a generic entry
 - 🟡 Email delivery (SMTP)
 - ✅ RSS feed output
 - ✅ Simple web dashboard + REST API (stdlib, self-hostable)
@@ -194,6 +200,11 @@ exercised by you once keys/egress are in place — they fail soft until then.
   live progress during `run`, one-line friendly errors with `--debug` escape
 - ✅ Hardening (0.2.0): opt-in `PAPERPULSE_API_TOKEN` on API writes; PDF
   fetches restricted to https + known publisher hosts
+- ✅ Hardening (0.5.0), from an internal security audit: `PAPERPULSE_API_TOKEN`
+  now gates every route (GET included, not just POST/writes); every outbound
+  fetch that checks a host allowlist (PDF downloads, retraction/citation
+  lookups) routes through a shared no-redirect opener (`netguard.py`), so an
+  allowlisted host can't redirect the request off-host
 - ✅ Self-hostable via Docker / docker-compose
 - ✅ Config-driven sources / signals / delivery
 - ✅ Offline test suite, CI across Python 3.10–3.12

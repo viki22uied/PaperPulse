@@ -17,6 +17,7 @@ import re
 import urllib.request
 
 from .models import Paper
+from .netguard import NO_REDIRECT_OPENER
 
 
 # pdf_url comes from feed XML (semi-trusted); only follow it to hosts the
@@ -49,7 +50,10 @@ def fetch_full_text(paper: Paper, *, timeout: float = 20.0, max_bytes: int = 20_
         request = urllib.request.Request(
             url, headers={"User-Agent": "PaperPulse/0.1"}
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        # A redirect off an allowlisted host (_url_allowed, above) would
+        # otherwise be followed with no re-validation of the destination --
+        # see paperpulse/netguard.py.
+        with NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
             data = response.read(max_bytes)
         reader = PdfReader(io.BytesIO(data))
         return "\n".join(page.extract_text() or "" for page in reader.pages)

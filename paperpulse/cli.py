@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -144,6 +145,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.full_text:
         config.full_text = True
 
+    # --no-diff always wins; for --format json the diff prose has nowhere to
+    # go (json output is result.ranked/contradictions, not result.markdown),
+    # so skip computing it rather than pay for a second pipeline run unused.
+    include_diff = not args.no_diff and args.format == "markdown"
+
     # Progress goes to stderr so `paperpulse run > digest.md` stays clean.
     err = Console(stderr=True)
     if err.is_terminal:
@@ -154,7 +160,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 skip_seen=not args.include_seen,
                 dry_run=args.dry_run,
                 on_stage=status.update,
-                include_diff=not args.no_diff,
+                include_diff=include_diff,
             )
     else:
         result = run_digest(
@@ -163,16 +169,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
             skip_seen=not args.include_seen,
             dry_run=args.dry_run,
             on_stage=lambda msg: print(msg, file=sys.stderr),
-            include_diff=not args.no_diff,
+            include_diff=include_diff,
         )
-    print(result.markdown)
-    if result.contradictions and not args.dry_run:
-        print("\n### Possible contradictions in today's batch\n", file=sys.stderr)
-        for pair in result.contradictions[:5]:
-            print(
-                f"- ({pair.similarity:.2f}) {pair.a.title!r} vs {pair.b.title!r}",
-                file=sys.stderr,
-            )
+
+    if args.format == "json":
+        from .serialize import digest_to_dict
+
+        print(json.dumps(digest_to_dict(result), indent=2))
+    else:
+        print(result.markdown)
+        if result.contradictions and not args.dry_run:
+            print("\n### Possible contradictions in today's batch\n", file=sys.stderr)
+            for pair in result.contradictions[:5]:
+                print(
+                    f"- ({pair.similarity:.2f}) {pair.a.title!r} vs {pair.b.title!r}",
+                    file=sys.stderr,
+                )
     if result.path:
         print(f"\nSaved digest to {result.path}", file=sys.stderr)
     return 0
@@ -260,6 +272,31 @@ def _cmd_alpha(args: argparse.Namespace) -> int:
         )
         return 0
     console.print(table)
+    return 0
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    """Today's digest as BibTeX -- drop straight into Zotero/Mendeley/EndNote
+    or a LaTeX bibliography instead of copy-pasting titles by hand."""
+    from .export import digest_to_bibtex
+
+    config = Config.load(args.config)
+    if args.top_n:
+        config.top_n = args.top_n
+
+    on_stage = (lambda _msg: None) if args.quiet else lambda msg: print(msg, file=sys.stderr)
+    result = run_digest(config, dry_run=True, on_stage=on_stage)
+
+    if not result.ranked:
+        print("No papers in today's batch to export.", file=sys.stderr)
+        return 0
+
+    bibtex = digest_to_bibtex(result.ranked)
+    if args.output:
+        Path(args.output).write_text(bibtex, encoding="utf-8")
+        print(f"Wrote {len(result.ranked)} entries to {args.output}", file=sys.stderr)
+    else:
+        print(bibtex)
     return 0
 
 
@@ -543,6 +580,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--include-seen", action="store_true")
     p_run.add_argument("--dry-run", action="store_true")
     p_run.add_argument(
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="output format for stdout -- json for scripting/automation "
+        "(same shape as GET /api/digest)",
+    )
+    p_run.add_argument(
         "--no-diff",
         action="store_true",
         help="skip the 'What changed this week' section (it re-runs the "
@@ -569,6 +613,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_sim.add_argument("path", help="path to a .py / .ipynb file")
     p_sim.add_argument("--top-n", type=int, default=10)
     p_sim.set_defaults(func=_cmd_similar)
+
+    p_export = sub.add_parser(
+        "export", help="today's digest as BibTeX (Zotero/Mendeley/LaTeX)"
+    )
+    p_export.add_argument("--top-n", type=int, default=None)
+    p_export.add_argument("-o", "--output", default=None, metavar="FILE", help="write to a .bib file instead of stdout")
+    p_export.add_argument("--quiet", action="store_true", help="hide progress")
+    p_export.set_defaults(func=_cmd_export)
 
     p_note = sub.add_parser("note", help="add or list notes on a paper (needs community_db)")
     p_note.add_argument("paper_id")

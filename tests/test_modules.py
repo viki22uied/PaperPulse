@@ -100,6 +100,63 @@ def test_fetch_full_text_returns_none_without_pdf_url():
     assert fetch_full_text(Paper(id="1", title="t", abstract="a")) is None
 
 
+def test_fetch_full_text_uses_the_no_redirect_opener(monkeypatch):
+    """A host that passes the pdf_url allowlist can still redirect off-host;
+    the fetch must go through the shared no-redirect opener (netguard.py),
+    not urllib's default one which follows 3xx with no re-check."""
+    from paperpulse import fulltext
+    from paperpulse.models import Paper
+
+    calls = []
+
+    def fake_open(request, timeout):
+        calls.append(request.full_url)
+        raise RuntimeError("stop before actually hitting the network")
+
+    monkeypatch.setattr(fulltext.NO_REDIRECT_OPENER, "open", fake_open)
+    paper = Paper(id="1", title="t", abstract="a", pdf_url="https://arxiv.org/pdf/1.pdf")
+    result = fulltext.fetch_full_text(paper)
+    assert result is None  # fails soft
+    assert calls == ["https://arxiv.org/pdf/1.pdf"]  # went through the guarded opener
+
+
+def test_fetch_full_texts_runs_concurrently_and_skips_empty_results(monkeypatch):
+    """_fetch_full_texts fans out over a thread pool now instead of fetching
+    one paper at a time. Confirm: every paper's text lands under its own id
+    (order-independent correctness), a paper with no text (fetch_full_text's
+    own fail-soft path returns "") is left out of the dict exactly like the
+    old sequential loop did, and it's actually running concurrently rather
+    than just wrapping the same sequential work in an unused executor."""
+    import time
+
+    import paperpulse.pipeline as pipeline_mod
+    from paperpulse.config import Config
+    from paperpulse.models import Paper, RankedPaper
+
+    def fake_fetch(paper, **_):
+        time.sleep(0.05)  # long enough that sequential vs. concurrent differ
+        return "" if paper.id == "empty" else f"full text of {paper.id}"
+
+    monkeypatch.setattr("paperpulse.fulltext.fetch_full_text", fake_fetch)
+
+    ranked = [
+        RankedPaper(paper=Paper(id=pid, title="t", abstract="a"), score=0.5)
+        for pid in ["a", "b", "empty", "c"]
+    ]
+    t0 = time.time()
+    texts = pipeline_mod._fetch_full_texts(Config(), ranked)
+    elapsed = time.time() - t0
+
+    assert texts == {
+        "a": "full text of a",
+        "b": "full text of b",
+        "c": "full text of c",
+    }
+    assert "empty" not in texts
+    # 4 papers at 0.05s each: concurrent stays well under the 0.2s serial sum.
+    assert elapsed < 0.19
+
+
 def test_render_rss_is_wellformed():
     from xml.etree import ElementTree as ET
 
