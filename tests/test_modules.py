@@ -104,8 +104,18 @@ def test_fetch_full_text_uses_the_no_redirect_opener(monkeypatch):
     """A host that passes the pdf_url allowlist can still redirect off-host;
     the fetch must go through the shared no-redirect opener (netguard.py),
     not urllib's default one which follows 3xx with no re-check."""
+    import sys
+    import types
+
     from paperpulse import fulltext
     from paperpulse.models import Paper
+
+    # This test is about the redirect guard, not PDF parsing -- stub pypdf so
+    # it doesn't depend on the optional [pdf] extra being installed (CI's
+    # base `pip install -e ".[dev,backtest]"` doesn't include it).
+    fake_pypdf = types.ModuleType("pypdf")
+    fake_pypdf.PdfReader = object  # never actually called; open() raises first
+    monkeypatch.setitem(sys.modules, "pypdf", fake_pypdf)
 
     calls = []
 
