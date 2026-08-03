@@ -3,6 +3,9 @@
 Computes per-badge-tier hit rates, Brier scores, and reliability-diagram
 data against realized outcomes.  Base-rate corrected: retraction is rare,
 so raw accuracy is meaningless -- lift over base rate is what matters.
+
+Note: scores are per badge bucket (caution/mixed/clean), not per individual
+signal -- outcome sparsity makes per-flag calibration unreliable.
 """
 
 from __future__ import annotations

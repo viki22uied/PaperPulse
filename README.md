@@ -42,18 +42,6 @@ paperpulse alpha                       # today's papers as alpha cards
 paperpulse alpha --full-text           # also reads the actual PDF, not just the abstract (needs: pip install "paperpulse[pdf]")
 ```
 
-### The options-backtest demo — read this before you install it
-
-`paperpulse backtest` is a **teaching tool, not a trading tool.** It runs a real backtesting engine ([optopsy](https://github.com/goldspanlabs/optopsy)) on made-up, synthetic data, so you can see how an options strategy is actually tested — how strikes get picked, what a win/loss report looks like, why even a "good" strategy loses money sometimes.
-
-It does **not**:
-- verify whether any paper's claim is true
-- use real market data
-- connect to a broker or place any trade
-- give you financial advice of any kind
-
-Think of it as a flight simulator for reading finance papers, not an autopilot. It's an optional extra (`pip install "paperpulse[backtest]"`, needs Python 3.12+) — it's off by default and the rest of PaperPulse doesn't need it.
-
 ## Using it
 
 ```bash
