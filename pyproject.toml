@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "paperpulse"
 dynamic = ["version"]  # single source of truth: paperpulse/__init__.py
-description = "Relevance-ranked, trust-scored arXiv digests for quant finance and research: alpha cards, a LaTeX-rendered dashboard, and an options-backtest demo."
+description = "Relevance-ranked, trust-scored arXiv digests for quant finance and research: alpha cards, a LaTeX-rendered dashboard, and prospective flag validation."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "viki22uied" }]
 keywords = [
     "arxiv", "research", "digest", "nlp", "embeddings", "recommender",
-    "quant-finance", "finance", "econometrics", "backtesting", "options-trading",
+    "quant-finance", "finance", "econometrics",
     "trust-score", "paper-triage", "research-tool", "self-hosted", "dashboard",
     "llm", "research-assistant",
 ]
@@ -36,10 +36,6 @@ dependencies = [
 semantic = ["sentence-transformers>=2.2,<6"]
 llm = ["openai>=1.0,<2", "anthropic>=0.30,<1"]
 pdf = ["pypdf>=4.0,<6"]
-# Not bundled into `all`: optopsy is AGPL-3.0 (everything else here is
-# permissively licensed) and needs Python 3.12+, one major version ahead of
-# PaperPulse's own floor -- so it stays an explicit, separate opt-in.
-backtest = ["optopsy>=2.3,<3; python_version >= '3.12'"]
 dev = ["pytest>=7.0,<10", "mypy>=1.8,<2", "types-PyYAML"]
 all = [
     "sentence-transformers>=2.2,<6",
@@ -78,6 +74,5 @@ module = [
     "pypdf.*",
     "sklearn.*",
     "sentence_transformers.*",
-    "optopsy.*",
 ]
 ignore_missing_imports = true

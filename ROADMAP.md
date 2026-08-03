@@ -116,15 +116,6 @@ exercised by you once keys/egress are in place — they fail soft until then.
   (predictor→target, datasets, effect sizes, universe, period) and rate its
   testability; `paperpulse alpha`, digest, dashboard, and API. `--full-text`
   reads the PDF for the datasets and numbers abstracts leave out
-- ✅ Backtest mechanics demo (`paperpulse backtest`, `paperpulse[backtest]`
-  extra) — runs a real options backtest via optopsy on synthetic data, to
-  teach delta-targeted strike selection and what a backtest report actually
-  looks like (including losing trades). Explicitly not a verification of any
-  paper's claim — that needs real historical data, which optopsy doesn't ship
-  and PaperPulse doesn't redistribute. AGPL-3.0, Python 3.12+, isolated extra
-- ⏳ Real backtest verification — point the bridge at a user's own historical
-  options data (via `op.csv_data`) instead of the synthetic demo chain, so an
-  alpha card's claim can actually be tested rather than just illustrated
 - ✅ Novelty-vs-crowding score (batch embedding similarity)
 - ✅ Subgroup-robustness check
 - ✅ Metric-gaming detector

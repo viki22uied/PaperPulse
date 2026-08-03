@@ -112,7 +112,7 @@ def test_fetch_full_text_uses_the_no_redirect_opener(monkeypatch):
 
     # This test is about the redirect guard, not PDF parsing -- stub pypdf so
     # it doesn't depend on the optional [pdf] extra being installed (CI's
-    # base `pip install -e ".[dev,backtest]"` doesn't include it).
+    # base `pip install -e ".[dev]"` doesn't include it).
     fake_pypdf = types.ModuleType("pypdf")
     fake_pypdf.PdfReader = object  # never actually called; open() raises first
     monkeypatch.setitem(sys.modules, "pypdf", fake_pypdf)
