@@ -120,6 +120,10 @@ API keys and passwords always go in environment variables, never in the config f
 
 Run it daily with cron, or use the included GitHub Action to generate and commit a digest every weekday morning ([`.github/workflows/digest.yml`](.github/workflows/digest.yml)).
 
+## Built with AI
+
+Feature development, testing, and research for this project were done with the help of AI (Claude). The domain logic — what to build, which academic frameworks to operationalize (Harvey-Liu, DSR/PBO, Chen-Zimmermann), and how the signals should behave — comes from my own research background. AI accelerated the implementation, stress-testing, and iteration cycle.
+
 ## Contributing
 
 ```bash
