@@ -100,16 +100,15 @@ def deflation_gap_signal(paper: Paper, **_) -> Signal:
         return Signal(
             "deflation_gap", OK,
             "Reports trial count or multiple-testing correction.",
-            evidence=(has_trials or has_correction).group(0),
+            evidence=(has_trials.group(0) if has_trials else has_correction.group(0) if has_correction else ""),
         )
 
-    metric = has_sharpe or has_tstat
     return Signal(
         "deflation_gap", WARN,
         "Reports a Sharpe ratio or t-stat with no disclosed trial count "
         "and no multiple-testing correction.  The headline number cannot "
         "be deflated for selection bias (DSR/PBO framework).",
-        evidence=metric.group(0) if metric else "",
+        evidence=(has_sharpe.group(0) if has_sharpe else has_tstat.group(0) if has_tstat else ""),
         confidence=0.65,
         weight=1.3,
     )
@@ -135,7 +134,7 @@ def no_oos_validation_signal(paper: Paper, **_) -> Signal:
         "no_oos_validation", WARN,
         "Reports quantitative results with no mention of out-of-sample "
         "validation, walk-forward testing, or a holdout period.",
-        evidence=(has_sharpe or has_tstat).group(0) if (has_sharpe or has_tstat) else "",
+        evidence=(has_sharpe.group(0) if has_sharpe else has_tstat.group(0) if has_tstat else ""),
         confidence=0.6,
         weight=1.2,
     )
