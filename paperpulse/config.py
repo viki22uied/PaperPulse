@@ -93,6 +93,9 @@ class Config:
     state_path: str = ".paperpulse_state.json"
     community_db: str = ""  # path to shared SQLite trust store, "" = disabled
     topics_db: str = ""  # path to known/already-tried topics log, "" = disabled
+    validation_db: str = ""  # path to prospective flag-validation ledger, "" = disabled
+    polarity_db: str = ""  # path to polarity-flip monitor store, "" = disabled
+    cz_data_path: str = ""  # path to Chen-Zimmermann summary CSV for oos decay checks
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Config":

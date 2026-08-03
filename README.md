@@ -98,6 +98,10 @@ Or with Docker: `docker compose up`
 - **Notes** — jot down your own thoughts against any paper and keep them
 - **Delivery** — save to a file, email, RSS feed, or post to Slack/Discord
 - **Shared trust database** — a team can pool their trust scores in one place, and measure whether the trust badge is actually predictive of what people like (`paperpulse score-accuracy`)
+- **Prospective flag-validation ledger** — records every trust flag at assessment time, then reconciles against ground-truth outcomes (retraction via Crossref/OpenAlex, citation decline, out-of-sample decay via Chen-Zimmermann data). Per-badge calibration with Brier scores and lift over base rate (`paperpulse reconcile`, `paperpulse calibration`)
+- **Finance paper overfitting screener** — flags t-stats below the Harvey-Liu factor-zoo hurdle (3.0), Sharpe ratios without disclosed trial counts (Deflated Sharpe Ratio gap), and missing out-of-sample validation
+- **Polarity-flip monitor** — tracks contradiction pairs over time and alerts when a pair flips agreement-to-contradiction or vice versa, with per-pair consensus volatility metrics (`paperpulse polarity`)
+- **Flag-survival benchmark** — community-pooled per-signal precision against realized outcomes: which flags actually predict problems? (`paperpulse flag-survival`)
 
 ## Configuration
 

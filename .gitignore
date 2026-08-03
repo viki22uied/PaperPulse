@@ -15,6 +15,9 @@ env/
 digests/
 paperpulse.yaml
 
+# Local-only notes, never committed
+PROJECT_CONTEXT.md
+
 # Tooling
 .claude/
 .pytest_cache/

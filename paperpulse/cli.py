@@ -11,7 +11,16 @@ from pathlib import Path
 import yaml
 
 from .config import Config, DEFAULT_CONFIG_PATH
-from .pipeline import apply_feedback, find_similar_to_work, run_digest, score_accuracy_report
+from .pipeline import (
+    apply_feedback,
+    find_similar_to_work,
+    flag_survival_report,
+    polarity_report,
+    run_digest,
+    run_reconciliation,
+    score_accuracy_report,
+    validation_calibration,
+)
 
 
 # Topic packs for `init`: preset name -> (categories, default interests).
@@ -537,6 +546,88 @@ def _cmd_factors_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_reconcile(args: argparse.Namespace) -> int:
+    config = Config.load(args.config)
+    report = run_reconciliation(config)
+    if "error" in report:
+        print(report["error"])
+        return 1
+    hits = report["hits"]
+    total = sum(len(v) for v in hits.values())
+    print(f"Reconciliation complete: {total} new outcome(s) recorded.\n")
+    for source, items in hits.items():
+        if items:
+            print(f"  {source} ({len(items)}):")
+            for h in items[:10]:
+                print(f"    - {h.get('paper_id', '')}: {h.get('outcome', '')}")
+    stats = report.get("stats", {})
+    print(f"\nLedger: {stats.get('total_papers', 0)} papers, "
+          f"{stats.get('papers_with_outcomes', 0)} with outcomes.")
+    return 0
+
+
+def _cmd_calibration(args: argparse.Namespace) -> int:
+    config = Config.load(args.config)
+    report = validation_calibration(
+        config, outcome_filter=args.outcome or None
+    )
+    if "error" in report:
+        print(report["error"])
+        return 1
+    print(f"Calibration report ({report['total_papers']} papers, "
+          f"{report['total_outcomes']} with outcomes, "
+          f"base rate {report['base_rate']:.2%}):\n")
+    for b in report["buckets"]:
+        print(f"  {b['badge']:<8}  "
+              f"outcome rate {b['outcome_rate']:.2%}  "
+              f"lift {b['lift']:.1f}x  "
+              f"Brier {b['brier']:.4f}  "
+              f"({b['with_outcome']}/{b['total']})")
+    if report["outcome_types"]:
+        print(f"\nOutcome types: {report['outcome_types']}")
+    return 0
+
+
+def _cmd_polarity(args: argparse.Namespace) -> int:
+    config = Config.load(args.config)
+    report = polarity_report(config)
+    if "error" in report:
+        print(report["error"])
+        return 1
+    stats = report["stats"]
+    print(f"Polarity monitor: {stats['tracked_pairs']} pairs, "
+          f"{stats['total_observations']} observations, "
+          f"{stats['total_flips']} flips.\n")
+    flips = report["recent_flips"]
+    if flips:
+        print("Recent flips:")
+        for f in flips[:10]:
+            print(f"  - [{f['flipped_at'][:19]}] {f['note']}")
+    vol = report["consensus_volatility"]
+    if vol:
+        print(f"\nMost volatile pairs (flip rate):")
+        for pair, rate in sorted(vol.items(), key=lambda x: x[1], reverse=True)[:5]:
+            print(f"  {pair}: {rate:.1%}")
+    return 0
+
+
+def _cmd_flag_survival(args: argparse.Namespace) -> int:
+    config = Config.load(args.config)
+    report = flag_survival_report(config)
+    if "error" in report:
+        print(report["error"])
+        return 1
+    signals = report["signals"]
+    if not signals:
+        print("No flag survival data yet.")
+        return 0
+    print("Flag survival precision (confirmed / total):\n")
+    for s in signals:
+        print(f"  {s['signal']:<28} precision {s['precision']:.0%}  "
+              f"({s['confirmed']}/{s['total']})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="paperpulse", description="Relevance-ranked, trust-scored arXiv digests."
@@ -706,6 +797,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_src = sub.add_parser("sources", help="list available paper sources")
     p_src.set_defaults(func=_cmd_sources)
+
+    p_reconcile = sub.add_parser(
+        "reconcile",
+        help="run ground-truth reconcilers (retraction, replication, finance "
+        "decay) against the validation ledger",
+    )
+    p_reconcile.set_defaults(func=_cmd_reconcile)
+
+    p_calibration = sub.add_parser(
+        "calibration",
+        help="per-badge calibration report against realized outcomes "
+        "(Brier score, lift over base rate)",
+    )
+    p_calibration.add_argument(
+        "--outcome", default=None,
+        help="filter to one outcome type (e.g. retracted, oos_decay)",
+    )
+    p_calibration.set_defaults(func=_cmd_calibration)
+
+    p_polarity = sub.add_parser(
+        "polarity",
+        help="polarity-flip monitor: tracked contradiction pairs, flips, "
+        "and consensus volatility",
+    )
+    p_polarity.set_defaults(func=_cmd_polarity)
+
+    p_flag_survival = sub.add_parser(
+        "flag-survival",
+        help="community flag-survival precision report: which signals "
+        "have the best realized precision against ground truth",
+    )
+    p_flag_survival.set_defaults(func=_cmd_flag_survival)
 
     p_serve = sub.add_parser("serve", help="run the REST API + web dashboard")
     p_serve.add_argument("--host", default="127.0.0.1")

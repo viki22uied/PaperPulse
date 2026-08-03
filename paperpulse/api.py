@@ -39,8 +39,12 @@ from .pipeline import (
     DigestResult,
     apply_feedback,
     diff_digest,
+    flag_survival_report,
+    polarity_report,
     run_digest,
+    run_reconciliation,
     score_accuracy_report,
+    validation_calibration,
 )
 from .serialize import digest_to_dict
 from .sources import available
@@ -594,6 +598,13 @@ def make_handler(config: Config, config_path=None):
                     self._json({"notes": db.get_notes(paper_id)})
                 finally:
                     db.close()
+            elif path == "/api/calibration":
+                outcome = parse_qs(urlparse(self.path).query).get("outcome", [None])[0]
+                self._json(validation_calibration(config, outcome_filter=outcome))
+            elif path == "/api/polarity":
+                self._json(polarity_report(config))
+            elif path == "/api/flag-survival":
+                self._json(flag_survival_report(config))
             else:
                 self._json({"error": "not found"}, 404)
 
@@ -665,6 +676,8 @@ def make_handler(config: Config, config_path=None):
                     self._json({"ok": True})
                 finally:
                     db.close()
+            elif path == "/api/reconcile":
+                self._json(run_reconciliation(config))
             else:
                 self._json({"error": "not found"}, 404)
 

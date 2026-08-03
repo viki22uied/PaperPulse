@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS notes (
     note       TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS flag_survival (
+    signal     TEXT NOT NULL,
+    total      INTEGER NOT NULL DEFAULT 0,
+    confirmed  INTEGER NOT NULL DEFAULT 0,
+    false_pos  INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (signal)
+);
 """
 
 
@@ -124,3 +132,47 @@ class CommunityDB:
         query += " ORDER BY created_at"
         rows = self._conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
+
+    # --- flag survival --------------------------------------------------------
+    def record_flag_outcome(
+        self, signal_name: str, *, confirmed: bool
+    ) -> None:
+        row = self._conn.execute(
+            "SELECT total, confirmed, false_pos FROM flag_survival WHERE signal = ?",
+            (signal_name,),
+        ).fetchone()
+        if row:
+            new_total = row["total"] + 1
+            new_confirmed = row["confirmed"] + (1 if confirmed else 0)
+            new_fp = row["false_pos"] + (0 if confirmed else 1)
+            self._conn.execute(
+                "UPDATE flag_survival SET total=?, confirmed=?, false_pos=?, updated_at=? "
+                "WHERE signal=?",
+                (new_total, new_confirmed, new_fp, _now(), signal_name),
+            )
+        else:
+            self._conn.execute(
+                "INSERT INTO flag_survival (signal, total, confirmed, false_pos, updated_at) "
+                "VALUES (?,?,?,?,?)",
+                (signal_name, 1, 1 if confirmed else 0, 0 if confirmed else 1, _now()),
+            )
+        self._conn.commit()
+
+    def flag_survival_report(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT signal, total, confirmed, false_pos, updated_at "
+            "FROM flag_survival ORDER BY total DESC"
+        ).fetchall()
+        results = []
+        for r in rows:
+            total = r["total"]
+            precision = round(r["confirmed"] / total, 3) if total else 0.0
+            results.append({
+                "signal": r["signal"],
+                "total": total,
+                "confirmed": r["confirmed"],
+                "false_positives": r["false_pos"],
+                "precision": precision,
+                "updated_at": r["updated_at"],
+            })
+        return results

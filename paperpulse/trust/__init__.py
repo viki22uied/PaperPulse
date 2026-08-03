@@ -105,6 +105,7 @@ from . import publication  # noqa: E402,F401
 from . import external  # noqa: E402,F401
 from . import known_topics  # noqa: E402,F401
 from . import results  # noqa: E402,F401
+from . import overfitting  # noqa: E402,F401
 
 
 DEFAULT_SIGNALS = [
@@ -126,6 +127,9 @@ DEFAULT_SIGNALS = [
     "survivorship_bias",
     "transaction_cost_omission",
     "single_market_period",
+    "factor_zoo_hurdle",
+    "deflation_gap",
+    "no_oos_validation",
 ]
 
 

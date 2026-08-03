@@ -304,6 +304,50 @@ def _record_community(config: Config, ranked: list[RankedPaper]) -> None:
         db.close()
 
 
+def _record_validation(config: Config, ranked: list[RankedPaper]) -> None:
+    if not config.validation_db:
+        return
+    from .validation import ValidationLedger
+
+    ledger = ValidationLedger(config.validation_db)
+    try:
+        for item in ranked:
+            if item.trust is None:
+                continue
+            ledger.record_flags(
+                item.paper.id,
+                doi=item.paper.journal_ref or "",
+                signals=[
+                    {
+                        "name": s.name,
+                        "status": s.status,
+                        "confidence": s.confidence,
+                        "weight": s.weight,
+                        "hygiene": s.hygiene,
+                        "note": s.note,
+                        "evidence": s.evidence,
+                    }
+                    for s in item.trust.signals
+                ],
+                score=item.trust.score,
+                badge=item.trust.badge,
+            )
+    finally:
+        ledger.close()
+
+
+def _record_polarity(config: Config, contradictions: list[ContradictionPair]) -> list:
+    if not config.polarity_db or not contradictions:
+        return []
+    from .polarity import PolarityMonitor
+
+    monitor = PolarityMonitor(config.polarity_db)
+    try:
+        return monitor.record_and_detect_flips(contradictions)
+    finally:
+        monitor.close()
+
+
 def run_digest(
     config: Config,
     *,
@@ -401,6 +445,8 @@ def run_digest(
     output_path: Path | None = None
     if not dry_run:
         _record_community(config, ranked)
+        _record_validation(config, ranked)
+        _record_polarity(config, contradictions)
         state.add_snapshot(snapshot_key(config), _make_snapshot(result))
         for item in ranked:
             state.seen_ids.add(item.paper.id)
@@ -701,3 +747,102 @@ def find_similar_to_work(
     papers = _fetch(config)
     work_text = load_work(work_path)
     return similar_papers(work_text, papers, backend, top_n=top_n)
+
+
+def run_reconciliation(config: Config) -> dict:
+    """Run all configured ground-truth reconcilers against the validation ledger."""
+    if not config.validation_db:
+        return {"error": "validation_db not configured."}
+
+    from .validation import (
+        ValidationLedger,
+        RetractionReconciler,
+        ReplicationReconciler,
+        FinanceDecayReconciler,
+    )
+
+    ledger = ValidationLedger(config.validation_db)
+    try:
+        results: dict = {"retraction": [], "replication": [], "finance_decay": []}
+
+        results["retraction"] = RetractionReconciler().run(ledger)
+
+        results["replication"] = ReplicationReconciler().run(ledger)
+
+        if config.cz_data_path:
+            results["finance_decay"] = FinanceDecayReconciler(
+                cz_data_path=config.cz_data_path
+            ).run(ledger)
+
+        stats = ledger.stats()
+    finally:
+        ledger.close()
+
+    return {"hits": results, "stats": stats}
+
+
+def validation_calibration(
+    config: Config, *, outcome_filter: str | None = None
+) -> dict:
+    """Calibration report: per-badge outcome rates with Brier scores."""
+    if not config.validation_db:
+        return {"error": "validation_db not configured."}
+
+    from .validation import ValidationLedger, calibration_report
+    from dataclasses import asdict
+
+    ledger = ValidationLedger(config.validation_db)
+    try:
+        result = calibration_report(ledger, outcome_filter=outcome_filter)
+    finally:
+        ledger.close()
+
+    return {
+        "base_rate": result.base_rate,
+        "total_papers": result.total_papers,
+        "total_outcomes": result.total_outcomes,
+        "outcome_types": result.outcome_types,
+        "buckets": [
+            {
+                "badge": b.badge,
+                "total": b.total,
+                "with_outcome": b.with_outcome,
+                "outcome_rate": b.outcome_rate,
+                "brier": b.brier,
+                "lift": b.lift,
+            }
+            for b in result.buckets
+        ],
+    }
+
+
+def polarity_report(config: Config) -> dict:
+    """Polarity-flip monitor summary."""
+    if not config.polarity_db:
+        return {"error": "polarity_db not configured."}
+
+    from .polarity import PolarityMonitor
+
+    monitor = PolarityMonitor(config.polarity_db)
+    try:
+        return {
+            "stats": monitor.stats(),
+            "recent_flips": monitor.recent_flips(limit=20),
+            "consensus_volatility": monitor.consensus_volatility(),
+        }
+    finally:
+        monitor.close()
+
+
+def flag_survival_report(config: Config) -> dict:
+    """Community flag-survival precision report."""
+    if not config.community_db:
+        return {"error": "community_db not configured."}
+
+    from .community import CommunityDB
+
+    db = CommunityDB(config.community_db)
+    try:
+        return {"signals": db.flag_survival_report()}
+    finally:
+        db.close()

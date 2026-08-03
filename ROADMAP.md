@@ -56,7 +56,13 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ⏳ "Related work" completeness / citation-graph gaps — needs a citation graph (Semantic Scholar)
 - ⏳ Figure/table manipulation heuristics — needs figure/table extraction from PDFs
 - ⏳ Compute/resource reality check beyond keyword flags
-- ⏳ Replication-status tracker
+- ✅ Prospective flag-validation ledger (0.6.0): immutable prediction store
+  (`validation_db`) recording every trust flag at assessment time, with
+  ground-truth reconcilers for retraction (Crossref + OpenAlex), citation
+  decline, and out-of-sample decay (Chen-Zimmermann data). Per-badge
+  calibration with Brier scores and lift over base rate.
+  `paperpulse reconcile` / `paperpulse calibration` / `GET /api/calibration`
+- ⏳ FORRT/FLoRA replication-database reconciler (awaiting stable API)
 
 ## Known factor families / already-tried log
 - ✅ Shared SQLite log (`topics_db`) unifying "known factor family from the
@@ -135,6 +141,12 @@ exercised by you once keys/egress are in place — they fail soft until then.
   today's batch. Validated per the shared sub-requirement
   (`tests/test_literature_novelty.py`): 0% false positives, 80% true
   positives with the default hashing backend -- soft WARN only, never FLAG.
+- ✅ Factor-zoo hurdle signal: flags t-stats between 1.96 and 3.0 as below
+  the Harvey-Liu multiple-testing threshold for the 300+ factor zoo
+- ✅ Deflation-gap signal: flags Sharpe/t-stat reported without trial counts
+  or multiple-testing correction (Bailey & de Prado DSR/PBO gap)
+- ✅ No-OOS-validation signal: flags quantitative finance claims with no
+  mention of out-of-sample, walk-forward, or holdout validation
 - ⏳ Config-driven per-domain confound checklists (scaffold in config)
 
 ## Contradiction & context mapping
@@ -153,6 +165,10 @@ exercised by you once keys/egress are in place — they fail soft until then.
   default (`--mark` opts into writing `last_seen_at`; `GET /api/diff` never
   does, so it stays safe to repeat). Covered offline by `tests/test_diff.py`
   (5 tests, synthetic batches, no network).
+- ✅ Polarity-flip monitor (0.6.0): persistent per-pair polarity time-series
+  in a SQLite store (`polarity_db`), with automatic flip detection and
+  per-pair "consensus volatility" metric. `paperpulse polarity` shows
+  tracked pairs, recent flips, and the most volatile pairs
 - ⏳ Citation-trail contradiction (needs reference resolution / full text)
 
 ## Cross-referencing your own work
@@ -192,6 +208,9 @@ exercised by you once keys/egress are in place — they fail soft until then.
 - ✅ Self-hostable shared trust store (SQLite) to pool scores across users
 - ✅ Over-claiming leaderboard by author/venue
 - ✅ Per-paper annotation layer (`paperpulse note`, needs `community_db`)
+- ✅ Flag-survival benchmark (0.6.0): per-signal precision tracking against
+  realized outcomes across all users. `paperpulse flag-survival` reports
+  which signals have the best confirmed-vs-false-positive rate
 - ⏳ Hosted public instance + moderation
 
 ## Infra / meta
