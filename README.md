@@ -6,120 +6,124 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/viki22uied/PaperPulse?style=social)](https://github.com/viki22uied/PaperPulse/stargazers)
 
-**Every day, arXiv posts hundreds of new papers. PaperPulse picks the five that actually matter to you, tells you whether to trust them, and explains why — all in plain English.**
+**Each day, arXiv publishes hundreds of new papers. PaperPulse selects the five most relevant papers for you. It checks their quality and tells you why each paper matters.**
 
-If this saves you from reading a paper that wasn't worth your time, a ⭐ helps other researchers find it too.
+If this tool saves you time, a star helps other researchers find it.
 
-📄 **[See a real digest generated today →](examples/2026-07-31.md)** &nbsp;·&nbsp;
-🗺️ **[Roadmap](ROADMAP.md)** &nbsp;·&nbsp;
-🧪 **[Annotated example](examples/sample-digest.md)**
+[See a real digest](examples/2026-07-31.md) | [Roadmap](ROADMAP.md) | [Annotated example](examples/sample-digest.md)
 
-![PaperPulse dashboard — ranked, trust-scored papers with relevance bars, clean/mixed/caution badges, and alpha cards](docs/screenshot.png)
+![PaperPulse dashboard — ranked papers with trust scores, relevance bars, badges, and alpha cards](docs/screenshot.png)
 
-## What it actually does
+## What PaperPulse Does
 
-1. **Ranks papers by what you care about.** You describe your interests in a sentence. PaperPulse ranks today's papers against that, and gets smarter every time you say "more like this" / "less like this."
-2. **Flags papers that look shaky.** No error bars, no code, hyped-up language, results that only hold on one dataset — PaperPulse scans for the patterns that usually mean weaker work, and shows you exactly which words triggered the flag.
-3. **Remembers what you've already ruled out.** Log a topic as "dead end, already tried" once, and PaperPulse will flag it every time it resurfaces — even in a different country's market or a different dataset.
+1. **Ranks papers by your interests.** You describe your research interests in one sentence. PaperPulse ranks each new paper against your profile. The ranking improves each time you give feedback.
+2. **Flags weak papers.** PaperPulse scans for missing error bars, missing code, exaggerated language, and single-dataset results. It shows you the exact words that caused each flag.
+3. **Tracks topics you already tested.** Log a topic as "dead end" once. PaperPulse flags that topic each time it appears again, even in a different market or dataset.
 
-No API keys, no paid services, no sign-up. It works offline out of the box.
+PaperPulse does not need API keys, paid services, or sign-up. It works fully offline.
 
 ```bash
 pip install paperpulse
-paperpulse init      # 30-second setup wizard
-paperpulse run       # today's digest -> digests/YYYY-MM-DD.md
+paperpulse init      # 30-second setup
+paperpulse run       # makes today's digest in digests/YYYY-MM-DD.md
 ```
 
-## Finance papers get an extra "alpha card"
+## Alpha Cards for Finance Papers
 
-If a paper claims to find a trading edge, PaperPulse pulls out the specifics: what it's predicting, what data it used, what numbers it reported, and over what time period. A card can be:
+PaperPulse extracts testable claims from finance papers. Each alpha card shows the predictor, the target, the data sources, the effect sizes, and the time period.
 
-- **Strong** — data, numbers, and dates are all there. You could try to reproduce it.
-- **Vague** — the paper talks about markets but gives you nothing to check. This is the important case: it looks credible until you notice there's nothing underneath.
+- **Strong** — The paper gives data, numbers, and dates. You can try to reproduce the result.
+- **Vague** — The paper discusses markets but gives no data to check.
 
 ```bash
-paperpulse alpha                       # today's papers as alpha cards
-paperpulse alpha --full-text           # also reads the actual PDF, not just the abstract (needs: pip install "paperpulse[pdf]")
+paperpulse alpha                       # show alpha cards for today's papers
+paperpulse alpha --full-text           # also read the PDF (needs: pip install "paperpulse[pdf]")
 ```
 
-## Using it
+## How to Use PaperPulse
 
 ```bash
-# Command line
+# Run from the command line
 paperpulse run --categories cs.LG cs.CL
 
-# Scripting / automation -- structured JSON instead of markdown
+# Get structured JSON output
 paperpulse run --format json | jq '.papers[] | select(.trust.badge == "clean")'
 
-# Straight into your reference manager
-paperpulse export -o today.bib      # BibTeX -> Zotero, Mendeley, EndNote, LaTeX
+# Export to your reference manager
+paperpulse export -o today.bib      # BibTeX for Zotero, Mendeley, EndNote, LaTeX
 
-# As a Python library
+# Use as a Python library
 python -c "from paperpulse.pipeline import run_digest; from paperpulse.config import Config; \
            print(run_digest(Config(), dry_run=True).markdown)"
 
-# Web dashboard (built in, no extra install)
+# Start the web dashboard
 paperpulse serve            # open http://127.0.0.1:8000
 ```
 
-The dashboard has clickable topic filters, a settings panel to change what you're tracking without touching a config file, and renders any math in an abstract properly instead of showing raw symbols.
+The dashboard has topic filters, a settings panel, and renders LaTeX math correctly. You can also start with Docker: `docker compose up`
 
-Or with Docker: `docker compose up`
+## PaperPulse Compared to LLM Scripts
 
-## Why not just ask an LLM to summarize arXiv?
-
-| | Typical "arXiv + LLM" script | PaperPulse |
+| Feature | Typical arXiv + LLM script | PaperPulse |
 |---|---|---|
-| Ranking | Newest first | Ranked by *your* interests, and gets better as you give feedback |
-| Trust | Trusts whatever the summary says | 15+ automated checks for weak/shaky work, each one explained |
-| Memory | None — sees the same thing every day | Remembers what you've already ruled out |
-| Cost | Needs an API key | Runs fully offline for free |
+| Ranking | Shows newest papers first | Ranks papers by your interests. Improves with feedback |
+| Trust | Trusts the summary text | Runs 15+ automated checks. Explains each flag |
+| Memory | No memory between runs | Remembers topics you already tested |
+| Cost | Needs an API key | Runs fully offline at no cost |
 
-## More features
+## More Features
 
 - **Multiple sources** — arXiv, bioRxiv, medRxiv, PubMed, SSRN
-- **Finds contradictions** — flags pairs of recent papers that disagree with each other, and surfaces "What changed this week" in the digest itself
-- **BibTeX export** — `paperpulse export` drops today's digest straight into Zotero, Mendeley, EndNote, or a LaTeX bibliography
-- **JSON output** — `paperpulse run --format json` for scripts, dashboards, and cron jobs that want structured data, not markdown to parse
-- **Compares to your own code** — `paperpulse similar my_model.py` finds papers closest to what you're already working on
-- **Live prices for finance papers** — if a paper mentions the S&P 500, Bitcoin, etc., the dashboard shows the current price next to it (no API key needed)
-- **Notes** — jot down your own thoughts against any paper and keep them
-- **Delivery** — save to a file, email, RSS feed, or post to Slack/Discord
-- **Shared trust database** — a team can pool their trust scores in one place, and measure whether the trust badge is actually predictive of what people like (`paperpulse score-accuracy`)
-- **Prospective flag-validation ledger** — records every trust flag at assessment time, then reconciles against ground-truth outcomes (retraction via Crossref/OpenAlex, citation decline, out-of-sample decay via Chen-Zimmermann data). Per-badge calibration with Brier scores and lift over base rate (`paperpulse reconcile`, `paperpulse calibration`)
-- **Finance paper overfitting screener** — flags t-stats below the Harvey-Liu factor-zoo hurdle (3.0), Sharpe ratios without disclosed trial counts (Deflated Sharpe Ratio gap), and missing out-of-sample validation
-- **Polarity-flip monitor** — tracks contradiction pairs over time and alerts when a pair flips agreement-to-contradiction or vice versa, with per-pair consensus volatility metrics (`paperpulse polarity`)
-- **Flag-survival benchmark** — community-pooled per-signal precision against realized outcomes: which flags actually predict problems? (`paperpulse flag-survival`)
+- **Contradiction detection** — Flags pairs of papers that disagree. Shows what changed this week
+- **BibTeX export** — `paperpulse export` creates entries for Zotero, Mendeley, EndNote, or LaTeX
+- **JSON output** — `paperpulse run --format json` for scripts and dashboards
+- **Code comparison** — `paperpulse similar my_model.py` finds papers close to your code
+- **Live prices** — The dashboard shows current prices when a paper mentions S&P 500, Bitcoin, or other assets
+- **Notes** — Save your own notes on any paper
+- **Delivery** — Save to a file, send by email, publish as RSS, or post to Slack/Discord
+- **Shared trust database** — A team can pool trust scores and measure badge accuracy (`paperpulse score-accuracy`)
+- **Flag-validation ledger** — Records every trust flag at assessment time. Reconciles flags against ground-truth outcomes: retraction (Crossref/OpenAlex), citation decline, and out-of-sample decay (Chen-Zimmermann data). Reports per-badge Brier scores and lift over the base rate (`paperpulse reconcile`, `paperpulse calibration`)
+- **Overfitting screener** — Flags t-stats below the Harvey-Liu factor-zoo hurdle (3.0). Flags Sharpe ratios without trial counts (Deflated Sharpe Ratio gap). Flags missing out-of-sample validation
+- **Polarity-flip monitor** — Tracks contradiction pairs over time. Alerts you when a pair changes direction. Reports per-pair consensus volatility (`paperpulse polarity`)
+- **Flag-survival benchmark** — Tracks per-signal precision against realized outcomes. Shows which flags predict real problems (`paperpulse flag-survival`)
 
 ## Configuration
 
-`paperpulse init` writes a `paperpulse.yaml` you can edit by hand — see [`paperpulse.example.yaml`](paperpulse.example.yaml) for every option, commented.
+Run `paperpulse init` to create a `paperpulse.yaml` file. You can edit this file manually. See [`paperpulse.example.yaml`](paperpulse.example.yaml) for all options.
 
-API keys and passwords always go in environment variables, never in the config file: `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (only needed if you want AI-written summaries instead of the free built-in ones), `PAPERPULSE_SMTP_*` (email), `PAPERPULSE_SLACK_WEBHOOK` / `PAPERPULSE_DISCORD_WEBHOOK`, `NCBI_API_KEY`, `PAPERPULSE_API_TOKEN` (if set, every dashboard/API request — reads included — must carry it as a Bearer token).
+Put API keys and passwords in environment variables. Do not put them in the config file.
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | AI summaries (optional; built-in summaries work without these) |
+| `PAPERPULSE_SMTP_*` | Email delivery |
+| `PAPERPULSE_SLACK_WEBHOOK` / `PAPERPULSE_DISCORD_WEBHOOK` | Chat delivery |
+| `NCBI_API_KEY` | PubMed access (optional) |
+| `PAPERPULSE_API_TOKEN` | Guards all API and dashboard routes when set |
 
 ### Security
 
-- All outbound fetches that check a host allowlist (PDF downloads, code/data link checks) go through a shared no-redirect opener, so an allowlisted host can't be used to bounce a request off-host.
-- SQLite access is fully parameterized; config is loaded with `yaml.safe_load`.
-- `PAPERPULSE_API_TOKEN` gates every route except the static dashboard shell itself, which has nothing to protect.
-- Found a real issue? Please open an issue rather than a public PR with exploit details.
+- All outbound requests go through a no-redirect opener. An approved host cannot redirect the request to an unapproved host.
+- All SQLite queries use parameterized statements. Config files load through `yaml.safe_load`.
+- `PAPERPULSE_API_TOKEN` guards every route except the static dashboard page.
+- If you find a security problem, open an issue. Do not put exploit details in a public pull request.
 
 ## Scheduling
 
-Run it daily with cron, or use the included GitHub Action to generate and commit a digest every weekday morning ([`.github/workflows/digest.yml`](.github/workflows/digest.yml)).
+Run PaperPulse daily with cron. You can also use the included GitHub Action to create a digest every weekday morning. See [`.github/workflows/digest.yml`](.github/workflows/digest.yml).
 
 ## Built with AI
 
-Feature development, testing, and research for this project were done with the help of AI (Claude). The domain logic — what to build, which academic frameworks to operationalize (Harvey-Liu, DSR/PBO, Chen-Zimmermann), and how the signals should behave — comes from my own research background. AI accelerated the implementation, stress-testing, and iteration cycle.
+I developed the features, tests, and research for this project with the help of AI (Claude). The domain logic comes from my own research background. This includes the selection of academic frameworks (Harvey-Liu, DSR/PBO, Chen-Zimmermann) and the design of each signal. AI accelerated the implementation, the stress-testing, and the iteration cycle.
 
-## Contributing
+## How to Contribute
 
 ```bash
 pip install -e ".[dev]"
 pytest
 ```
 
-Tests run fully offline — no network, no API keys required. See [`ROADMAP.md`](ROADMAP.md) for what's built and what's planned.
+All tests run fully offline. No network access or API keys are necessary. See [`ROADMAP.md`](ROADMAP.md) for the full status of each feature.
 
 ## License
 
