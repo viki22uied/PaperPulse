@@ -99,26 +99,35 @@ def _fetch_page(query: str, start: int, page_size: int, timeout: float) -> list[
         f"{API_URL}?{params}",
         headers={"User-Agent": USER_AGENT},
     )
-    for attempt in range(2):
+    max_attempts = 5
+    for attempt in range(max_attempts):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 root = ET.fromstring(response.read())
             break
         except urllib.error.HTTPError as exc:
-            if exc.code not in (429, 503) or attempt == 1:
+            if exc.code not in (429, 503) or attempt == max_attempts - 1:
                 raise
-            time.sleep(3)  # back off: arXiv is rate-limiting us
-        except (TimeoutError, urllib.error.URLError) as exc:
+            wait = _retry_after_seconds(exc) or (3 * 2**attempt)  # 3, 6, 12, 24s
+            time.sleep(wait)
+        except (TimeoutError, urllib.error.URLError):
             # arXiv sometimes stalls a request instead of refusing it -- a read
             # timeout surfaces as a bare TimeoutError (not an HTTPError) and was
-            # taking down the whole scheduled digest. Give a transient stall one
-            # retry; a persistent outage still raises on the second attempt.
-            # ponytail: single retry, not a full backoff ladder -- the cron runs
-            # daily, a genuinely-down arXiv can wait for tomorrow.
-            if attempt == 1:
+            # taking down the whole scheduled digest.
+            if attempt == max_attempts - 1:
                 raise
-            time.sleep(3)
+            time.sleep(3 * 2**attempt)
     return [_entry_to_paper(e) for e in root.findall("atom:entry", _NS)]
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError) -> float | None:
+    value = exc.headers.get("Retry-After") if exc.headers else None
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def fetch_recent(

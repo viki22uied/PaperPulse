@@ -101,3 +101,68 @@ def test_fetch_page_raises_when_timeout_persists(monkeypatch):
 
     with pytest.raises(TimeoutError):
         arxiv._fetch_page("cat:cs.LG", 0, 10, timeout=1.0)
+
+
+def test_fetch_page_retries_through_a_429_burst(monkeypatch):
+    """The 2026-08-11/12 scheduled-digest failures were a 429 that gave up
+    after one retry. It must now survive several 429s in a row (this is what
+    GitHub Actions' shared egress IPs trigger from arXiv).
+    """
+    import urllib.error
+
+    from paperpulse.sources import arxiv
+
+    _ATOM = (
+        b'<?xml version="1.0"?>'
+        b'<feed xmlns="http://www.w3.org/2005/Atom"'
+        b' xmlns:arxiv="http://arxiv.org/schemas/atom"></feed>'
+    )
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return _ATOM
+
+    calls = {"n": 0}
+
+    def fake_urlopen(request, timeout=None):
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise urllib.error.HTTPError(
+                request.full_url, 429, "Too Many Requests", {}, None
+            )
+        return _Resp()
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(arxiv.time, "sleep", sleeps.append)
+    monkeypatch.setattr(arxiv.urllib.request, "urlopen", fake_urlopen)
+
+    papers = arxiv._fetch_page("cat:cs.LG", 0, 10, timeout=1.0)
+    assert calls["n"] == 4  # three 429s, then success
+    assert papers == []
+    assert sleeps == [3, 6, 12]  # exponential backoff, not a flat 3s
+
+
+def test_fetch_page_raises_when_429_exhausts_all_retries(monkeypatch):
+    """A genuinely rate-limited-all-day arXiv still fails loudly, not silently."""
+    import urllib.error
+
+    import pytest
+
+    from paperpulse.sources import arxiv
+
+    def always_429(request, timeout=None):
+        raise urllib.error.HTTPError(
+            request.full_url, 429, "Too Many Requests", {}, None
+        )
+
+    monkeypatch.setattr(arxiv.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(arxiv.urllib.request, "urlopen", always_429)
+
+    with pytest.raises(urllib.error.HTTPError):
+        arxiv._fetch_page("cat:cs.LG", 0, 10, timeout=1.0)
