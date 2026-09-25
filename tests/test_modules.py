@@ -137,14 +137,19 @@ def test_fetch_full_texts_runs_concurrently_and_skips_empty_results(monkeypatch)
     own fail-soft path returns "") is left out of the dict exactly like the
     old sequential loop did, and it's actually running concurrently rather
     than just wrapping the same sequential work in an unused executor."""
-    import time
+    import threading
 
     import paperpulse.pipeline as pipeline_mod
     from paperpulse.config import Config
     from paperpulse.models import Paper, RankedPaper
 
+    # All four fetches must be in flight at once to pass the barrier; run one
+    # at a time, the first waiter times out and raises BrokenBarrierError.
+    # (This used to assert elapsed < 0.19s, which flaked on busy CI runners.)
+    barrier = threading.Barrier(4, timeout=5)
+
     def fake_fetch(paper, **_):
-        time.sleep(0.05)  # long enough that sequential vs. concurrent differ
+        barrier.wait()
         return "" if paper.id == "empty" else f"full text of {paper.id}"
 
     monkeypatch.setattr("paperpulse.fulltext.fetch_full_text", fake_fetch)
@@ -153,9 +158,7 @@ def test_fetch_full_texts_runs_concurrently_and_skips_empty_results(monkeypatch)
         RankedPaper(paper=Paper(id=pid, title="t", abstract="a"), score=0.5)
         for pid in ["a", "b", "empty", "c"]
     ]
-    t0 = time.time()
     texts = pipeline_mod._fetch_full_texts(Config(), ranked)
-    elapsed = time.time() - t0
 
     assert texts == {
         "a": "full text of a",
@@ -163,8 +166,6 @@ def test_fetch_full_texts_runs_concurrently_and_skips_empty_results(monkeypatch)
         "c": "full text of c",
     }
     assert "empty" not in texts
-    # 4 papers at 0.05s each: concurrent stays well under the 0.2s serial sum.
-    assert elapsed < 0.19
 
 
 def test_render_rss_is_wellformed():
