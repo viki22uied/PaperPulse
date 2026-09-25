@@ -757,6 +757,12 @@ def _friendly_error(exc: Exception) -> str | None:
                 f"The paper source is rate-limiting us (HTTP {exc.code}) -- "
                 "wait a minute and retry."
             )
+        if exc.code in (403, 406):
+            return (
+                f"The paper source refused the request (HTTP {exc.code}). "
+                "It may be blocking this network; retry later or from "
+                "another connection."
+            )
         return f"The paper source returned HTTP {exc.code}."
     if isinstance(exc, urllib.error.URLError):
         return f"Network problem reaching the paper source: {exc.reason}"
